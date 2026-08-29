@@ -328,12 +328,25 @@ qmap_id_ex(uint32_t hd, const void * const key,
     size_t *key_len_out, uint32_t *key_hash_out)
 {
   qmap_head_t *head = &qmap_heads[hd];
-  qmap_type_t *type = &qmap_types[head->types[QM_KEY]];
+  uint32_t ktype = head->types[QM_KEY];
+  qmap_type_t *type = &qmap_types[ktype];
 
-  size_t key_len = type->measure
-    ? type->measure(key)
-    : type->len;
-  uint32_t key_hash = type->hash(key, key_len);
+  size_t key_len;
+  uint32_t key_hash;
+
+  if (ktype == QM_STR) {
+    key_len = strlen((const char *)key) + 1;
+    key_hash = XXH32(key, key_len, QM_SEED);
+  } else if (ktype == QM_U32 || ktype == QM_HNDL) {
+    key_len = sizeof(uint32_t);
+    key_hash = *(const uint32_t *)key;
+  } else if (ktype == QM_PTR) {
+    key_len = sizeof(void *);
+    key_hash = XXH32(key, key_len, QM_SEED);
+  } else {
+    key_len = type->measure ? type->measure(key) : type->len;
+    key_hash = type->hash(key, key_len);
+  }
 
   if (key_len_out)
     *key_len_out = key_len;
@@ -349,7 +362,7 @@ qmap_id_hash(uint32_t hd, const void * const key,
 {
   qmap_head_t *head = &qmap_heads[hd];
   qmap_t *qmap = &qmaps[hd];
-  qmap_type_t *type = &qmap_types[head->types[QM_KEY]];
+  uint32_t ktype = head->types[QM_KEY];
   uint32_t id = key_hash & head->mask;
   uint32_t probe_count = 0;
 
@@ -359,28 +372,36 @@ qmap_id_hash(uint32_t hd, const void * const key,
     if (n == QM_MISS)
       return id;
 
-    const void *okey = qmap_key(hd, n);
-
-    if (okey &&
-        qmap->key_hashes[n] == key_hash)
-    {
-      size_t len;
-
-      if (type->measure) {
-        size_t okey_len =
-          qmap->key_sizes[n];
-
-        len = key_len > okey_len
-          ? key_len
-          : okey_len;
-      } else {
-        len = type->len;
+    if (qmap->key_hashes[n] == key_hash) {
+      const void *okey = qmap_key(hd, n);
+      if (okey) {
+        if (ktype == QM_STR) {
+          if (memcmp(okey, key, key_len) == 0)
+            return id;
+        } else if (ktype == QM_U32 || ktype == QM_HNDL) {
+          if (*(const uint32_t *)okey == *(const uint32_t *)key)
+            return id;
+        } else if (ktype == QM_PTR) {
+          if (*(const void * const *)okey == *(const void * const *)key)
+            return id;
+        } else {
+          qmap_type_t *type = &qmap_types[ktype];
+          size_t len;
+          if (type->measure) {
+            size_t okey_len = qmap->key_sizes[n];
+            if (okey_len != key_len)
+              goto next_probe;
+            len = key_len;
+          } else {
+            len = type->len;
+          }
+          if (type->cmp(okey, key, len) == 0)
+            return id;
+        }
       }
-
-      if (type->cmp(okey, key, len) == 0)
-        return id;
     }
 
+next_probe:
     id = (id + 1) & head->mask;
 
     if (++probe_count >= head->m)
@@ -1181,6 +1202,7 @@ _qmap_put(uint32_t hd, const void * key,
 
   rkey = (void *) key;
   qmap->key_hashes[n] = key_hash;
+  qmap->key_sizes[n] = key_len;
 
   if (head->phd == hd) {
     if (head->types[QM_VALUE] == QM_PTR)
@@ -1466,14 +1488,15 @@ qmap_get(uint32_t hd, const void * const key)
     }
   }
 
-  uint32_t cur_id = qmap_iter(hd, key, 0), sn;
-
-  if (!qmap_lnext(&sn, cur_id))
+  uint32_t id = qmap_id(hd, key);
+  if (id == QM_MISS)
     return NULL;
 
-  qmap_fin(cur_id);
+  uint32_t n = qmaps[hd].map[id];
+  if (n == QM_MISS)
+    return NULL;
 
-  return qmap_val(hd, sn);
+  return qmap_val(hd, n);
 }
 
 /* }}} */
@@ -2213,7 +2236,13 @@ qmap_field_put(uint32_t hd, const char *item_id,
   uint32_t ft = qmap_records[head->record_id].fields[fi].type;
 
   char key[256];
-  snprintf(key, sizeof(key), "%s:%s", item_id, field_name);
+  size_t ilen = strlen(item_id);
+  size_t flen = strlen(field_name);
+  if (ilen + 1 + flen >= sizeof(key)) return QM_MISS;
+  memcpy(key, item_id, ilen);
+  key[ilen] = ':';
+  memcpy(key + ilen + 1, field_name, flen);
+  key[ilen + 1 + flen] = '\0';
 
   if (ft == QM_REFERENCE) {
     uint32_t thd = qmap_records[head->record_id].fields[fi].target_hd;
@@ -2277,17 +2306,27 @@ qmap_field_get(uint32_t hd, const char *item_id,
   if (fi < 0) return NULL;
   uint32_t ft = qmap_records[head->record_id].fields[fi].type;
 
-  char key[256];
-  snprintf(key, sizeof(key), "%s:%s", item_id, field_name);
-
-  if (ft == QM_REFERENCE) {
-    const char *stored = qmap_get(hd, key);
-    if (!stored || stored[0] == '\0')
-      return NULL;
-    return stored;
+  if (ft == QM_VSTR) {
+    if (head->vstr_hd == 0) return NULL;
+    char key[256];
+    size_t ilen = strlen(item_id);
+    size_t flen = strlen(field_name);
+    if (ilen + 1 + flen >= sizeof(key)) return NULL;
+    memcpy(key, item_id, ilen);
+    key[ilen] = ':';
+    memcpy(key + ilen + 1, field_name, flen);
+    key[ilen + 1 + flen] = '\0';
+    return qmap_get(head->vstr_hd, key);
   }
 
-  return qmap_get(hd, key);
+  const void *struct_ptr = qmap_get(hd, item_id);
+  if (!struct_ptr) return NULL;
+
+  size_t field_offset = qmap_records[head->record_id].fields[fi].offset;
+  const char *result = (const char *)struct_ptr + field_offset;
+  if (ft == QM_REFERENCE && (!result || result[0] == '\0'))
+    return NULL;
+  return result;
 }
 
   const char * /* API */
@@ -2303,11 +2342,13 @@ qmap_get_key(uint32_t hd, uint32_t pos)
   uint32_t /* API */
 qmap_pos(uint32_t hd, const char *key)
 {
-  qmap_t *qmap = &qmaps[hd];
-  for (uint32_t i = 0; i < qmap->idm.last; i++)
-    if (qmap->omap[i] && strcmp((const char *)qmap->omap[i], key) == 0)
-      return i;
-  return UINT32_MAX;
+  if (!key)
+    return UINT32_MAX;
+  uint32_t id = qmap_id(hd, key);
+  if (id == QM_MISS)
+    return UINT32_MAX;
+  uint32_t n = qmaps[hd].map[id];
+  return (n == QM_MISS) ? UINT32_MAX : n;
 }
 
   size_t /* API */
