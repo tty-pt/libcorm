@@ -2213,37 +2213,37 @@ extern "C" {
 extern "C" {
     pub fn getloadavg(__loadavg: *mut f64, __nelem: libc::c_int) -> libc::c_int;
 }
-#[doc = " Auto–index for NULL keys. When enabled, passing NULL\n  as the key to qmap_put generates auto-incrementing IDs."]
-pub const qmap_flags_QM_AINDEX: qmap_flags = 1;
-#[doc = " Create reverse-lookup (secondary) map. The mirror map\n  handle is always primary_hd + 1 and swaps keys/values.\n\n  QM_MIRROR is useful when you need bidirectional lookup (key→value\n  and value→key) and is commonly used with file persistence.\n\n  The mirror map is automatically closed when you close the primary\n  map via qmap_close(hd)."]
-pub const qmap_flags_QM_MIRROR: qmap_flags = 2;
-#[doc = " For associated maps: default to obtaining primary keys\n  instead of values. Used internally for mirror maps and\n  essential for creating value→key secondary indexes.\n\n  When a secondary map has QM_PGET, qmap_get() returns\n  the primary key instead of the primary value. This allows\n  secondary indexes to map from values back to keys."]
-pub const qmap_flags_QM_PGET: qmap_flags = 4;
+#[doc = " Auto–index for NULL keys. When enabled, passing NULL\n  as the key to corm_put generates auto-incrementing IDs."]
+pub const corm_flags_CM_AINDEX: corm_flags = 1;
+#[doc = " Create reverse-lookup (secondary) map. The mirror map\n  handle is always primary_hd + 1 and swaps keys/values.\n\n  CM_MIRROR is useful when you need bidirectional lookup (key→value\n  and value→key) and is commonly used with file persistence.\n\n  The mirror map is automatically closed when you close the primary\n  map via corm_close(hd)."]
+pub const corm_flags_CM_MIRROR: corm_flags = 2;
+#[doc = " For associated maps: default to obtaining primary keys\n  instead of values. Used internally for mirror maps and\n  essential for creating value→key secondary indexes.\n\n  When a secondary map has CM_PGET, corm_get() returns\n  the primary key instead of the primary value. This allows\n  secondary indexes to map from values back to keys."]
+pub const corm_flags_CM_PGET: corm_flags = 4;
 #[doc = " Enable sorted index support (B-tree search). Enables\n  ordered iteration. Index is automatically rebuilt on\n  modifications (put/del operations mark it dirty).\n\n  Performance Note: The sorted index is rebuilt from scratch\n  whenever it's marked dirty and iteration is requested.\n  This makes the first iteration after modifications O(n log n)\n  instead of O(n)."]
-pub const qmap_flags_QM_SORTED: qmap_flags = 8;
-#[doc = " Allow duplicate keys in sorted maps. Enables multi-value\n  lookups where multiple entries can share the same key.\n\n  REQUIRES QM_SORTED: This flag cannot be used without QM_SORTED.\n  qmap_open() will return QM_MISS if QM_MULTIVALUE is set without\n  QM_SORTED.\n\n  Behavior:\n  - qmap_put() with an existing key ADDS a new entry (does not replace)\n  - qmap_get() returns the FIRST matching value\n  - qmap_get_multi() returns cursor to iterate over ALL matching values\n  - qmap_count() returns the number of entries for a key\n  - qmap_del() deletes only the FIRST matching entry\n  - qmap_del_all() deletes ALL entries with the specified key\n\n  Use Case: Secondary indexes via qmap_assoc() where multiple primary\n  entries map to the same secondary key."]
-pub const qmap_flags_QM_MULTIVALUE: qmap_flags = 16;
-#[doc = " Disable auto-grow. When set and the map reaches capacity,\n  inserts return QM_MISS instead of growing the table.\n  Use for memory-constrained environments or fixed-size tables."]
-pub const qmap_flags_QM_NOGROW: qmap_flags = 32;
-#[doc = " @brief QMap flags."]
-pub type qmap_flags = libc::c_uint;
+pub const corm_flags_CM_SORTED: corm_flags = 8;
+#[doc = " Allow duplicate keys in sorted maps. Enables multi-value\n  lookups where multiple entries can share the same key.\n\n  REQUIRES CM_SORTED: This flag cannot be used without CM_SORTED.\n  corm_open() will return CM_MISS if CM_MULTIVALUE is set without\n  CM_SORTED.\n\n  Behavior:\n  - corm_put() with an existing key ADDS a new entry (does not replace)\n  - corm_get() returns the FIRST matching value\n  - corm_get_multi() returns cursor to iterate over ALL matching values\n  - corm_count() returns the number of entries for a key\n  - corm_del() deletes only the FIRST matching entry\n  - corm_del_all() deletes ALL entries with the specified key\n\n  Use Case: Secondary indexes via corm_assoc() where multiple primary\n  entries map to the same secondary key."]
+pub const corm_flags_CM_MULTIVALUE: corm_flags = 16;
+#[doc = " Disable auto-grow. When set and the map reaches capacity,\n  inserts return CM_MISS instead of growing the table.\n  Use for memory-constrained environments or fixed-size tables."]
+pub const corm_flags_CM_NOGROW: corm_flags = 32;
+#[doc = " @brief Corm flags."]
+pub type corm_flags = libc::c_uint;
 #[doc = " Pointer (hashed)."]
-pub const qmap_tbi_QM_PTR: qmap_tbi = 0;
+pub const corm_tbi_CM_PTR: corm_tbi = 0;
 #[doc = " Opaque handle. Uses value directly as hash (no transformation)."]
-pub const qmap_tbi_QM_HNDL: qmap_tbi = 1;
+pub const corm_tbi_CM_HNDL: corm_tbi = 1;
 #[doc = " String contents hash and compare."]
-pub const qmap_tbi_QM_STR: qmap_tbi = 2;
+pub const corm_tbi_CM_STR: corm_tbi = 2;
 #[doc = " 32-bit unsigned integer (hash and mask)."]
-pub const qmap_tbi_QM_U32: qmap_tbi = 3;
+pub const corm_tbi_CM_U32: corm_tbi = 3;
 #[doc = " @brief Built-in type identifiers."]
-pub type qmap_tbi = libc::c_uint;
-#[doc = " Continue iteration even if key differs from the initial.\n  Behavior depends on whether QM_SORTED was set on the map:\n  - With QM_SORTED: performs ordered range scan from the\n    starting key onwards (B-tree ordered iteration)\n  - Without QM_SORTED: performs linear scan through the\n    hash table, comparing keys with the initial key using\n    the type's comparison function"]
-pub const qmap_if_QM_RANGE: qmap_if = 1;
+pub type corm_tbi = libc::c_uint;
+#[doc = " Continue iteration even if key differs from the initial.\n  Behavior depends on whether CM_SORTED was set on the map:\n  - With CM_SORTED: performs ordered range scan from the\n    starting key onwards (B-tree ordered iteration)\n  - Without CM_SORTED: performs linear scan through the\n    hash table, comparing keys with the initial key using\n    the type's comparison function"]
+pub const corm_if_CM_RANGE: corm_if = 1;
 #[doc = " @brief Iterator flags."]
-pub type qmap_if = libc::c_uint;
+pub type corm_if = libc::c_uint;
 extern "C" {
-    #[doc = " @brief Open a database.\n\n Creates an in-memory map and registers its handle\n with the internal file cache, linking it to\n 'filename'. If a file exists, it loads the map\n data for the specified 'database'.\n\n @param[in] filename Path to file or cache key.\n                     NULL → in-memory only.\n @param[in] database Logical name within file.\n                     NULL → skip file association.\n @param[in] ktype    Built-in or registered key\n                     type.\n @param[in] vtype    Built-in or registered value\n                     type.\n @param[in] mask     Must be 2ⁿ − 1; table size is\n                     (mask + 1).\n @param[in] flags    Bitwise OR of QM_AINDEX,\n                     QM_MIRROR, QM_SORTED, etc.\n @return             Map handle (hd).\n\n @note File Persistence: File-backed maps automatically load\n       data from disk when opened, regardless of flags. The\n       QM_MIRROR flag enables bidirectional lookup (creating a\n       reverse map at handle hd + 1) which is useful for many\n       persistence scenarios. The mirror map is automatically\n       closed when closing the primary map.\n\n @note Multiple databases can share a single file. Each database\n       is identified by a hash of its name (XXH32). Data is saved\n       and loaded based on this database ID."]
-    pub fn qmap_open(
+    #[doc = " @brief Open a database.\n\n Creates an in-memory map and registers its handle\n with the internal file cache, linking it to\n 'filename'. If a file exists, it loads the map\n data for the specified 'database'.\n\n @param[in] filename Path to file or cache key.\n                     NULL → in-memory only.\n @param[in] database Logical name within file.\n                     NULL → skip file association.\n @param[in] ktype    Built-in or registered key\n                     type.\n @param[in] vtype    Built-in or registered value\n                     type.\n @param[in] mask     Must be 2ⁿ − 1; table size is\n                     (mask + 1).\n @param[in] flags    Bitwise OR of CM_AINDEX,\n                     CM_MIRROR, CM_SORTED, etc.\n @return             Map handle (hd).\n\n @note File Persistence: File-backed maps automatically load\n       data from disk when opened, regardless of flags. The\n       CM_MIRROR flag enables bidirectional lookup (creating a\n       reverse map at handle hd + 1) which is useful for many\n       persistence scenarios. The mirror map is automatically\n       closed when closing the primary map.\n\n @note Multiple databases can share a single file. Each database\n       is identified by a hash of its name (XXH32). Data is saved\n       and loaded based on this database ID."]
+    pub fn corm_open(
         filename: *const libc::c_char,
         database: *const libc::c_char,
         ktype: u32,
@@ -2254,42 +2254,42 @@ extern "C" {
 }
 extern "C" {
     #[doc = " @brief Get the value type of a map.\n\n @param[in] hd  Map handle.\n @return        Value type ID."]
-    pub fn qmap_get_vtype(hd: u32) -> u32;
+    pub fn corm_get_vtype(hd: u32) -> u32;
 }
 extern "C" {
     #[doc = " @brief Get the fixed length of a type.\n\n @param[in] type_id Type ID.\n @return            Fixed length in bytes, or 0 for variable-length."]
-    pub fn qmap_type_len(type_id: u32) -> usize;
+    pub fn corm_type_len(type_id: u32) -> usize;
 }
 extern "C" {
     #[doc = " @brief Write all file-backed maps to disk.\n\n Walks the internal cache, computes file sizes,\n and performs mmap/memcpy writes for maps\n associated with a file.\n\n @note This is automatically called at process exit.\n       Explicit calls are only needed for mid-execution\n       checkpointing or when you want to ensure data\n       is persisted before continuing."]
-    pub fn qmap_save();
+    pub fn corm_save();
 }
 extern "C" {
     #[doc = " @brief Close a map and free its resources.\n\n Deletes all entries, closes associated secondary maps,\n and frees internal structures. All open maps are\n automatically closed at process exit by the library\n destructor, but you can call this explicitly to free\n resources earlier.\n\n @param[in] hd Handle to close."]
-    pub fn qmap_close(hd: u32);
+    pub fn corm_close(hd: u32);
 }
 extern "C" {
-    #[doc = " @brief Retrieve a value by key.\n\n For maps with QM_MULTIVALUE flag, this returns the FIRST\n matching value only. To retrieve all values for a key, use\n qmap_get_multi() instead.\n\n @param[in] hd  Map handle.\n @param[in] key Key to look up.\n @return        Pointer to value or NULL if not found.\n                For QM_MULTIVALUE maps, returns first match.\n                See qmap_common for pointer ownership rules."]
-    pub fn qmap_get(hd: u32, key: *const libc::c_void) -> *const libc::c_void;
+    #[doc = " @brief Retrieve a value by key.\n\n For maps with CM_MULTIVALUE flag, this returns the FIRST\n matching value only. To retrieve all values for a key, use\n corm_get_multi() instead.\n\n @param[in] hd  Map handle.\n @param[in] key Key to look up.\n @return        Pointer to value or NULL if not found.\n                For CM_MULTIVALUE maps, returns first match.\n                See corm_common for pointer ownership rules."]
+    pub fn corm_get(hd: u32, key: *const libc::c_void) -> *const libc::c_void;
 }
 extern "C" {
-    #[doc = " @brief Insert or update a pair.\n\n Behavior depends on the QM_MULTIVALUE flag:\n - Without QM_MULTIVALUE: Replaces existing value if key exists\n - With QM_MULTIVALUE: Always adds a new entry (duplicates allowed)\n\n @param[in] hd    Map handle.\n @param[in] key   Key (NULL if QM_AINDEX).\n @param[in] value Value to store.\n @return          Internal index for the entry. With QM_AINDEX,\n                  this is the generated key ID."]
-    pub fn qmap_put(hd: u32, key: *const libc::c_void, value: *const libc::c_void) -> u32;
+    #[doc = " @brief Insert or update a pair.\n\n Behavior depends on the CM_MULTIVALUE flag:\n - Without CM_MULTIVALUE: Replaces existing value if key exists\n - With CM_MULTIVALUE: Always adds a new entry (duplicates allowed)\n\n @param[in] hd    Map handle.\n @param[in] key   Key (NULL if CM_AINDEX).\n @param[in] value Value to store.\n @return          Internal index for the entry. With CM_AINDEX,\n                  this is the generated key ID."]
+    pub fn corm_put(hd: u32, key: *const libc::c_void, value: *const libc::c_void) -> u32;
 }
 extern "C" {
-    #[doc = " @brief Delete an entry by key.\n\n For maps with QM_MULTIVALUE flag, this only deletes the FIRST\n occurrence of the key. To delete all duplicates, call this\n function multiple times until the key no longer exists.\n\n @param[in] hd  Map handle.\n @param[in] key Key to delete."]
-    pub fn qmap_del(hd: u32, key: *const libc::c_void);
+    #[doc = " @brief Delete an entry by key.\n\n For maps with CM_MULTIVALUE flag, this only deletes the FIRST\n occurrence of the key. To delete all duplicates, call this\n function multiple times until the key no longer exists.\n\n @param[in] hd  Map handle.\n @param[in] key Key to delete."]
+    pub fn corm_del(hd: u32, key: *const libc::c_void);
 }
 extern "C" {
-    #[doc = " @brief Delete all entries with the specified key.\n\n For QM_MULTIVALUE maps, removes all duplicate entries. For regular maps,\n behaves identically to qmap_del().\n\n @param[in] hd  Map handle.\n @param[in] key Key of entries to delete.\n\n @see qmap_del\n @see qmap_get_multi"]
-    pub fn qmap_del_all(hd: u32, key: *const libc::c_void);
+    #[doc = " @brief Delete all entries with the specified key.\n\n For CM_MULTIVALUE maps, removes all duplicate entries. For regular maps,\n behaves identically to corm_del().\n\n @param[in] hd  Map handle.\n @param[in] key Key of entries to delete.\n\n @see corm_del\n @see corm_get_multi"]
+    pub fn corm_del_all(hd: u32, key: *const libc::c_void);
 }
 extern "C" {
     #[doc = " @brief Remove all entries from a map.\n\n @param[in] hd Map handle."]
-    pub fn qmap_drop(hd: u32);
+    pub fn corm_drop(hd: u32);
 }
 #[doc = " @brief Association callback type.\n\n After association, future puts/dels on the\n primary will update the secondary.\n Deletes on the primary remove corresponding\n entries from the secondary.\n\n @param[out] skey  Pointer to set secondary key.\n @param[in]  pkey  Primary key.\n @param[in]  value Primary value."]
-pub type qmap_assoc_t = ::std::option::Option<
+pub type corm_assoc_t = ::std::option::Option<
     unsafe extern "C" fn(
         skey: *mut *const libc::c_void,
         pkey: *const libc::c_void,
@@ -2298,11 +2298,11 @@ pub type qmap_assoc_t = ::std::option::Option<
     ),
 >;
 extern "C" {
-    #[doc = " @brief Make an association between tables.\n\n Links a secondary (index) map to a primary map so that\n put/delete operations on the primary automatically update\n the secondary. The callback determines the secondary key.\n\n @param[in] hd   Secondary (index) map handle.\n @param[in] link Primary (source) map handle.\n @param[in] cb   Callback to produce secondary\n                 keys. NULL → use primary value.\n\n @note The secondary map stores (secondary_key, primary_value).\n       To retrieve the primary KEY instead of the primary VALUE,\n       the secondary map must be created with the QM_PGET flag.\n       This is essential for creating value→key indexes.\n\n @code\n // Example: Create a secondary index from username -> user_id\n // Primary: user_id -> username\n uint32_t users = qmap_open(NULL, NULL, QM_U32, QM_STR, 0xFF, 0);\n\n // Secondary: username -> user_id\n // QM_PGET makes qmap_get return the primary key instead of value\n uint32_t by_name = qmap_open(NULL, NULL, QM_STR, QM_U32, 0xFF, QM_PGET);\n\n // Callback: use primary value (username) as secondary key\n static void value_to_key(const void **skey,\n                          const void *pkey,\n                          const void *value) {\n     (void) pkey;\n     *skey = value;  // Use username as key\n }\n\n qmap_assoc(by_name, users, value_to_key);\n\n // Now puts to 'users' automatically update 'by_name'\n qmap_put(users, &(uint32_t){100}, \"alice\");\n // by_name now contains: \"alice\" -> 100\n @endcode"]
-    pub fn qmap_assoc(hd: u32, link: u32, cb: qmap_assoc_t, userdata: *mut libc::c_void);
+    #[doc = " @brief Make an association between tables.\n\n Links a secondary (index) map to a primary map so that\n put/delete operations on the primary automatically update\n the secondary. The callback determines the secondary key.\n\n @param[in] hd   Secondary (index) map handle.\n @param[in] link Primary (source) map handle.\n @param[in] cb   Callback to produce secondary\n                 keys. NULL → use primary value.\n\n @note The secondary map stores (secondary_key, primary_value).\n       To retrieve the primary KEY instead of the primary VALUE,\n       the secondary map must be created with the CM_PGET flag.\n       This is essential for creating value→key indexes.\n\n @code\n // Example: Create a secondary index from username -> user_id\n // Primary: user_id -> username\n uint32_t users = corm_open(NULL, NULL, CM_U32, CM_STR, 0xFF, 0);\n\n // Secondary: username -> user_id\n // CM_PGET makes corm_get return the primary key instead of value\n uint32_t by_name = corm_open(NULL, NULL, CM_STR, CM_U32, 0xFF, CM_PGET);\n\n // Callback: use primary value (username) as secondary key\n static void value_to_key(const void **skey,\n                          const void *pkey,\n                          const void *value) {\n     (void) pkey;\n     *skey = value;  // Use username as key\n }\n\n corm_assoc(by_name, users, value_to_key);\n\n // Now puts to 'users' automatically update 'by_name'\n corm_put(users, &(uint32_t){100}, \"alice\");\n // by_name now contains: \"alice\" -> 100\n @endcode"]
+    pub fn corm_assoc(hd: u32, link: u32, cb: corm_assoc_t, userdata: *mut libc::c_void);
 }
 #[doc = " @brief Multi-key association callback type."]
-pub type qmap_assoc_multi_t = ::std::option::Option<
+pub type corm_assoc_multi_t = ::std::option::Option<
     unsafe extern "C" fn(
         skeys: *mut *const libc::c_void,
         max_skeys: libc::size_t,
@@ -2313,15 +2313,15 @@ pub type qmap_assoc_multi_t = ::std::option::Option<
 >;
 extern "C" {
     #[doc = " @brief Make a multi-key association between tables."]
-    pub fn qmap_assoc_multi(hd: u32, link: u32, cb: qmap_assoc_multi_t, userdata: *mut libc::c_void);
+    pub fn corm_assoc_multi(hd: u32, link: u32, cb: corm_assoc_multi_t, userdata: *mut libc::c_void);
 }
 extern "C" {
-    #[doc = " @brief Start iteration.\n\n Creates a cursor for iterating over map entries.\n Ordered ranges require QM_SORTED flag on the map.\n\n @param[in] hd    Map handle.\n @param[in] key   Starting key or NULL for all entries.\n @param[in] flags Iterator flags (QM_RANGE valid).\n                  - QM_RANGE with QM_SORTED: ordered scan\n                  - QM_RANGE without QM_SORTED: linear scan\n                  - No flags: iterate single key (or all if key is NULL)\n @return          Cursor handle for use with qmap_next."]
-    pub fn qmap_iter(hd: u32, key: *const libc::c_void, flags: u32) -> u32;
+    #[doc = " @brief Start iteration.\n\n Creates a cursor for iterating over map entries.\n Ordered ranges require CM_SORTED flag on the map.\n\n @param[in] hd    Map handle.\n @param[in] key   Starting key or NULL for all entries.\n @param[in] flags Iterator flags (CM_RANGE valid).\n                  - CM_RANGE with CM_SORTED: ordered scan\n                  - CM_RANGE without CM_SORTED: linear scan\n                  - No flags: iterate single key (or all if key is NULL)\n @return          Cursor handle for use with corm_next."]
+    pub fn corm_iter(hd: u32, key: *const libc::c_void, flags: u32) -> u32;
 }
 extern "C" {
-    #[doc = " @brief Fetch next key/value.\n\n @param[out] key    Pointer to key.\n @param[out] value  Pointer to value.\n @param[in]  cur_id Cursor handle.\n @return            1 if valid, 0 if done.\n                    See qmap_common for pointer ownership rules."]
-    pub fn qmap_next(
+    #[doc = " @brief Fetch next key/value.\n\n @param[out] key    Pointer to key.\n @param[out] value  Pointer to value.\n @param[in]  cur_id Cursor handle.\n @return            1 if valid, 0 if done.\n                    See corm_common for pointer ownership rules."]
+    pub fn corm_next(
         key: *mut *const libc::c_void,
         value: *mut *const libc::c_void,
         cur_id: u32,
@@ -2329,50 +2329,50 @@ extern "C" {
 }
 extern "C" {
     #[doc = " @brief End iteration early.\n\n @param[in] cur_id Cursor handle."]
-    pub fn qmap_fin(cur_id: u32);
+    pub fn corm_fin(cur_id: u32);
 }
 extern "C" {
-    #[doc = " @brief Start iteration over all values for a key.\n\n For maps with QM_MULTIVALUE flag, this returns a cursor that\n iterates over ALL values associated with the given key in\n sorted order. For maps without QM_MULTIVALUE, this behaves\n like a single-value iterator.\n\n @param[in] hd  Map handle.\n @param[in] key Key to look up.\n @return        Cursor handle for use with qmap_next(), or\n                QM_MISS if key not found.\n\n Example:\n @code\n uint32_t cur = qmap_get_multi(hd, &key);\n if (cur != QM_MISS) {\n   const void *k, *v;\n   while (qmap_next(&k, &v, cur)) {\n     // Process each value for this key\n   }\n   qmap_fin(cur);\n }\n @endcode\n\n @note Internally, this is equivalent to: qmap_iter(hd, key, 0)\n @note For single-value lookups, qmap_get() is more efficient\n @see qmap_del_all for deleting all duplicates at once\n @see qmap_count for counting entries without iteration"]
-    pub fn qmap_get_multi(hd: u32, key: *const libc::c_void) -> u32;
+    #[doc = " @brief Start iteration over all values for a key.\n\n For maps with CM_MULTIVALUE flag, this returns a cursor that\n iterates over ALL values associated with the given key in\n sorted order. For maps without CM_MULTIVALUE, this behaves\n like a single-value iterator.\n\n @param[in] hd  Map handle.\n @param[in] key Key to look up.\n @return        Cursor handle for use with corm_next(), or\n                CM_MISS if key not found.\n\n Example:\n @code\n uint32_t cur = corm_get_multi(hd, &key);\n if (cur != CM_MISS) {\n   const void *k, *v;\n   while (corm_next(&k, &v, cur)) {\n     // Process each value for this key\n   }\n   corm_fin(cur);\n }\n @endcode\n\n @note Internally, this is equivalent to: corm_iter(hd, key, 0)\n @note For single-value lookups, corm_get() is more efficient\n @see corm_del_all for deleting all duplicates at once\n @see corm_count for counting entries without iteration"]
+    pub fn corm_get_multi(hd: u32, key: *const libc::c_void) -> u32;
 }
 extern "C" {
-    #[doc = " @brief Count entries matching a key.\n\n @param[in] hd  Map handle.\n @param[in] key Key to count. NULL counts total entries in map.\n @return        Number of matching entries.\n\n @note For QM_MULTIVALUE maps, returns count of all duplicate values\n @note For normal maps, returns 0 or 1"]
-    pub fn qmap_count(hd: u32, key: *const libc::c_void) -> u32;
+    #[doc = " @brief Count entries matching a key.\n\n @param[in] hd  Map handle.\n @param[in] key Key to count. NULL counts total entries in map.\n @return        Number of matching entries.\n\n @note For CM_MULTIVALUE maps, returns count of all duplicate values\n @note For normal maps, returns 0 or 1"]
+    pub fn corm_count(hd: u32, key: *const libc::c_void) -> u32;
 }
 #[doc = " @brief Callback to measure variable-size keys.\n\n Keys of dynamic length need measurement when\n hashing/comparing beyond pointer equality.\n\n @param[in] data Pointer to key.\n @return         Key size in bytes."]
-pub type qmap_measure_t =
+pub type corm_measure_t =
     ::std::option::Option<unsafe extern "C" fn(data: *const libc::c_void) -> usize>;
 extern "C" {
-    #[doc = " @brief Register a fixed-length type.\n\n Registers a new custom type with a fixed byte length.\n The type will use the default hash (XXH32) and\n comparison (memcmp) functions.\n\n @param[in] len Length in bytes.\n @return        Type ID for use in qmap_open, or\n                QM_MISS if type limit is reached."]
-    pub fn qmap_reg(len: usize) -> u32;
+    #[doc = " @brief Register a fixed-length type.\n\n Registers a new custom type with a fixed byte length.\n The type will use the default hash (XXH32) and\n comparison (memcmp) functions.\n\n @param[in] len Length in bytes.\n @return        Type ID for use in corm_open, or\n                CM_MISS if type limit is reached."]
+    pub fn corm_reg(len: usize) -> u32;
 }
 #[doc = " @brief Comparison callback type.\n\n @param[in] a   First object.\n @param[in] b   Second object.\n @param[in] len Length in bytes.\n @return        <0, 0, or >0."]
-pub type qmap_cmp_t = ::std::option::Option<
+pub type corm_cmp_t = ::std::option::Option<
     unsafe extern "C" fn(a: *const libc::c_void, b: *const libc::c_void, len: usize) -> libc::c_int,
 >;
 extern "C" {
     #[doc = " @brief Assign comparison function to a type.\n\n @param[in] ref Type ID.\n @param[in] cmp Comparison callback."]
-    pub fn qmap_cmp_set(ref_: u32, cmp: qmap_cmp_t);
+    pub fn corm_cmp_set(ref_: u32, cmp: corm_cmp_t);
 }
 extern "C" {
-    #[doc = " @brief Register a variable-length type.\n\n Registers a new custom type with variable length.\n A measurement callback is required to determine the\n size of each element. The type will use the default\n hash (XXH32) and comparison (memcmp) functions.\n\n @param[in] measure Size-measuring callback.\n @return            Type ID for use in qmap_open, or\n                    QM_MISS if type limit is reached."]
-    pub fn qmap_mreg(measure: qmap_measure_t) -> u32;
+    #[doc = " @brief Register a variable-length type.\n\n Registers a new custom type with variable length.\n A measurement callback is required to determine the\n size of each element. The type will use the default\n hash (XXH32) and comparison (memcmp) functions.\n\n @param[in] measure Size-measuring callback.\n @return            Type ID for use in corm_open, or\n                    CM_MISS if type limit is reached."]
+    pub fn corm_mreg(measure: corm_measure_t) -> u32;
 }
 extern "C" {
     #[doc = " @brief Get the byte length of an element.\n\n @param[in] type_id Type ID.\n @param[in] data    Element pointer.\n @return            Size in bytes."]
-    pub fn qmap_len(type_id: u32, data: *const libc::c_void) -> usize;
+    pub fn corm_len(type_id: u32, data: *const libc::c_void) -> usize;
 }
 extern "C" {
     #[doc = " @brief Get the key string for a position.\n\n @param[in] hd   Map handle.\n @param[in] pos  Position number.\n @return         Key string, or NULL if pos is out of range."]
-    pub fn qmap_get_key(hd: u32, pos: u32) -> *const libc::c_char;
+    pub fn corm_get_key(hd: u32, pos: u32) -> *const libc::c_char;
 }
 extern "C" {
     #[doc = " @brief Get the position number for a given key string.\n\n @param[in] hd   Map handle.\n @param[in] key  Key string.\n @return         Position number, or UINT32_MAX if not found."]
-    pub fn qmap_pos(hd: u32, key: *const libc::c_char) -> u32;
+    pub fn corm_pos(hd: u32, key: *const libc::c_char) -> u32;
 }
 extern "C" {
     #[doc = " @brief Query the inverse index for a reference field.\n\n @param[in]  hd          Map handle.\n @param[in]  field_name  Reference field name.\n @param[in]  target_pos  Position in the target map.\n @param[out] out         Array to fill with source positions.\n @param[in]  max         Capacity of out[].\n @return                 Number of positions written."]
-    pub fn qmap_inv_get(
+    pub fn corm_inv_get(
         hd: u32,
         field_name: *const libc::c_char,
         target_pos: u32,

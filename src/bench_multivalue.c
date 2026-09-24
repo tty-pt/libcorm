@@ -1,75 +1,75 @@
 /*
- * Performance benchmarks for QM_MULTIVALUE refactoring
+ * Performance benchmarks for CM_MULTIVALUE refactoring
  * 
  * This benchmarks the performance improvements from:
- * - P1.1: Fix double binary search in qmap_iter
- * - P1.2: Optimize qmap_count from O(n) to O(log n)
- * - P1.3: Remove redundant key lookup in qmap_get_multi
- * - P1.5: Optimize qmap_drop for standalone maps
+ * - P1.1: Fix double binary search in corm_iter
+ * - P1.2: Optimize corm_count from O(n) to O(log n)
+ * - P1.3: Remove redundant key lookup in corm_get_multi
+ * - P1.5: Optimize corm_drop for standalone maps
  * - P1.6: Cache hashes for dense string lookup
- * - P3.1: Optimize qmap_del_all
+ * - P3.1: Optimize corm_del_all
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <ttypt/qmap.h>
+#include <ttypt/corm.h>
 
 #define BENCH(name) printf("\n[%s]\n", name)
 #define TIME_START() clock_t start = clock()
 #define TIME_END(var) double var = ((double)(clock() - start)) / CLOCKS_PER_SEC * 1000.0
 
-/* Benchmark: qmap_iter creation (P1.1 impact) */
+/* Benchmark: corm_iter creation (P1.1 impact) */
 void bench_iter_creation(void)
 {
-	BENCH("P1.1: qmap_iter creation");
+	BENCH("P1.1: corm_iter creation");
 	
 	/* Create map with 1000 duplicates */
-	uint32_t hd = qmap_open(NULL, NULL, QM_U32, QM_U32, 2047, QM_MULTIVALUE | QM_SORTED);
+	uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_U32, 2047, CM_MULTIVALUE | CM_SORTED);
 	for (uint32_t i = 0; i < 1000; i++) {
 		uint32_t key = 100;
-		qmap_put(hd, &key, &i);
+		corm_put(hd, &key, &i);
 	}
 	
 	/* Benchmark: Create 10,000 iterators */
 	TIME_START();
 	for (int i = 0; i < 10000; i++) {
 		uint32_t key = 100;
-		uint32_t cur = qmap_iter(hd, &key, 0);
-		qmap_fin(cur);
+		uint32_t cur = corm_iter(hd, &key, 0);
+		corm_fin(cur);
 	}
 	TIME_END(elapsed);
 	
 	printf("  10,000 iterations on 1000 duplicates: %.2f ms\n", elapsed);
 	printf("  Average per iter: %.4f ms\n", elapsed / 10000.0);
 	
-	qmap_close(hd);
+	corm_close(hd);
 }
 
-/* Benchmark: qmap_get_multi creation (P1.3 impact) */
+/* Benchmark: corm_get_multi creation (P1.3 impact) */
 void bench_get_multi(void)
 {
-	BENCH("P1.3: qmap_get_multi creation");
+	BENCH("P1.3: corm_get_multi creation");
 
-	uint32_t hd = qmap_open(NULL, NULL, QM_U32, QM_U32, 2047, QM_MULTIVALUE | QM_SORTED);
+	uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_U32, 2047, CM_MULTIVALUE | CM_SORTED);
 	for (int i = 0; i < 1000; i++) {
 		uint32_t key = 100;
 		uint32_t value = (uint32_t)i;
-		qmap_put(hd, &key, &value);
+		corm_put(hd, &key, &value);
 	}
 
 	TIME_START();
 	for (int i = 0; i < 10000; i++) {
 		uint32_t key = 100;
-		uint32_t cur = qmap_get_multi(hd, &key);
-		qmap_fin(cur);
+		uint32_t cur = corm_get_multi(hd, &key);
+		corm_fin(cur);
 	}
 	TIME_END(elapsed);
 
 	printf("  10,000 get_multi calls on 1000 duplicates: %.2f ms\n", elapsed);
 	printf("  Average per call: %.4f ms\n", elapsed / 10000.0);
 
-	qmap_close(hd);
+	corm_close(hd);
 }
 
 /* Benchmark: iterate a duplicate run (cached key length impact) */
@@ -77,51 +77,51 @@ void bench_duplicate_iter(void)
 {
 	BENCH("P1.4: duplicate run iteration");
 
-	uint32_t hd = qmap_open(NULL, NULL, QM_U32, QM_U32, 2047, QM_MULTIVALUE | QM_SORTED);
+	uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_U32, 2047, CM_MULTIVALUE | CM_SORTED);
 	for (int i = 0; i < 1000; i++) {
 		uint32_t key = 100;
 		uint32_t value = (uint32_t)i;
-		qmap_put(hd, &key, &value);
+		corm_put(hd, &key, &value);
 	}
 
 	TIME_START();
 	for (int i = 0; i < 1000; i++) {
 		uint32_t key = 100;
-		uint32_t cur = qmap_get_multi(hd, &key);
+		uint32_t cur = corm_get_multi(hd, &key);
 		const void *k, *v;
 
-		while (qmap_next(&k, &v, cur))
+		while (corm_next(&k, &v, cur))
 			(void)k, (void)v;
 
-		qmap_fin(cur);
+		corm_fin(cur);
 	}
 	TIME_END(elapsed);
 
 	printf("  1,000 full duplicate scans on 1,000 duplicates: %.2f ms\n", elapsed);
 	printf("  Average per scan: %.4f ms\n", elapsed / 1000.0);
 
-	qmap_close(hd);
+	corm_close(hd);
 }
 
-/* Benchmark: qmap_drop on standalone maps (P1.5 impact) */
+/* Benchmark: corm_drop on standalone maps (P1.5 impact) */
 void bench_drop(void)
 {
-	BENCH("P1.5: qmap_drop performance");
+	BENCH("P1.5: corm_drop performance");
 
 	double total = 0.0;
 
 	for (int run = 0; run < 100; run++) {
-		uint32_t hd = qmap_open(NULL, NULL, QM_U32, QM_U32, 2047, 0);
+		uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_U32, 2047, 0);
 
 		for (uint32_t i = 0; i < 1000; i++)
-			qmap_put(hd, &i, &i);
+			corm_put(hd, &i, &i);
 
 		TIME_START();
-		qmap_drop(hd);
+		corm_drop(hd);
 		TIME_END(elapsed);
 
 		total += elapsed;
-		qmap_close(hd);
+		corm_close(hd);
 	}
 
 	printf("  Drop 1,000-entry standalone map (avg of 100 runs): %.4f ms\n",
@@ -133,18 +133,18 @@ void bench_dense_lookup(void)
 {
 	BENCH("P1.6: dense string lookup");
 
-	uint32_t hd = qmap_open(NULL, NULL, QM_STR, QM_U32, 2047, 0);
+	uint32_t hd = corm_open(NULL, NULL, CM_STR, CM_U32, 2047, 0);
 	char keybuf[32];
 
 	for (uint32_t i = 0; i < 1800; i++) {
 		snprintf(keybuf, sizeof(keybuf), "key%04u", i);
-		qmap_put(hd, keybuf, &i);
+		corm_put(hd, keybuf, &i);
 	}
 
 	snprintf(keybuf, sizeof(keybuf), "key1799");
 	TIME_START();
 	for (int i = 0; i < 10000; i++) {
-		const uint32_t *value = qmap_get(hd, keybuf);
+		const uint32_t *value = corm_get(hd, keybuf);
 		(void)value;
 	}
 	TIME_END(elapsed);
@@ -152,7 +152,7 @@ void bench_dense_lookup(void)
 	printf("  10,000 lookups in 1,800-entry string map: %.2f ms\n", elapsed);
 	printf("  Average per lookup: %.4f ms\n", elapsed / 10000.0);
 
-	qmap_close(hd);
+	corm_close(hd);
 }
 
 /* Benchmark: string puts on a primary map (payload allocation impact) */
@@ -165,28 +165,28 @@ void bench_put_strings(void)
 	char valbuf[32];
 
 	for (int run = 0; run < 100; run++) {
-		uint32_t hd = qmap_open(NULL, NULL, QM_STR, QM_STR, 2047, 0);
+		uint32_t hd = corm_open(NULL, NULL, CM_STR, CM_STR, 2047, 0);
 
 		TIME_START();
 		for (uint32_t i = 0; i < 1000; i++) {
 			snprintf(keybuf, sizeof(keybuf), "key%04u", i);
 			snprintf(valbuf, sizeof(valbuf), "val%04u", i);
-			qmap_put(hd, keybuf, valbuf);
+			corm_put(hd, keybuf, valbuf);
 		}
 		TIME_END(elapsed);
 
 		total += elapsed;
-		qmap_close(hd);
+		corm_close(hd);
 	}
 
 	printf("  Insert 1,000 string entries (avg of 100 runs): %.4f ms\n",
 			total / 100.0);
 }
 
-/* Benchmark: qmap_count (P1.2 impact) */
+/* Benchmark: corm_count (P1.2 impact) */
 void bench_count(void)
 {
-	BENCH("P1.2: qmap_count performance");
+	BENCH("P1.2: corm_count performance");
 	
 	int duplicate_counts[] = {1, 10, 100, 1000, 10000};
 	int capacities[] = {15, 31, 255, 2047, 16383};
@@ -197,18 +197,18 @@ void bench_count(void)
 		int capacity = capacities[t];
 		
 		/* Create map with N duplicates */
-		uint32_t hd = qmap_open(NULL, NULL, QM_U32, QM_U32, capacity, QM_MULTIVALUE | QM_SORTED);
+		uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_U32, capacity, CM_MULTIVALUE | CM_SORTED);
 		for (int i = 0; i < dup_count; i++) {
 			uint32_t key = 100;
 			uint32_t value = (uint32_t)i;
-			qmap_put(hd, &key, &value);
+			corm_put(hd, &key, &value);
 		}
 		
-		/* Benchmark: Call qmap_count 1000 times */
+		/* Benchmark: Call corm_count 1000 times */
 		TIME_START();
 		for (int i = 0; i < 1000; i++) {
 			uint32_t key = 100;
-			size_t count = qmap_count(hd, &key);
+			size_t count = corm_count(hd, &key);
 			(void)count;  /* Suppress unused warning */
 		}
 		TIME_END(elapsed);
@@ -216,14 +216,14 @@ void bench_count(void)
 		printf("  %5d duplicates (1000 calls): %8.2f ms (avg: %.4f ms)\n", 
 		       dup_count, elapsed, elapsed / 1000.0);
 		
-		qmap_close(hd);
+		corm_close(hd);
 	}
 }
 
-/* Benchmark: qmap_del_all (P3.1 impact) */
+/* Benchmark: corm_del_all (P3.1 impact) */
 void bench_del_all(void)
 {
-	BENCH("P3.1: qmap_del_all performance");
+	BENCH("P3.1: corm_del_all performance");
 	
 	int duplicate_counts[] = {10, 100, 1000};
 	int capacities[] = {31, 255, 2047};
@@ -237,23 +237,23 @@ void bench_del_all(void)
 		double total_time = 0.0;
 		for (int run = 0; run < 100; run++) {
 			/* Create map with N duplicates */
-			uint32_t hd = qmap_open(NULL, NULL, QM_U32, QM_U32, capacity, QM_MULTIVALUE | QM_SORTED);
+			uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_U32, capacity, CM_MULTIVALUE | CM_SORTED);
 			for (int i = 0; i < dup_count; i++) {
 				uint32_t key = 100;
 				uint32_t value = (uint32_t)i;
-				qmap_put(hd, &key, &value);
+				corm_put(hd, &key, &value);
 			}
 			
 			/* Benchmark: Delete all */
 			TIME_START();
 			{
 				uint32_t key = 100;
-				qmap_del_all(hd, &key);
+				corm_del_all(hd, &key);
 			}
 			TIME_END(elapsed);
 			
 			total_time += elapsed;
-			qmap_close(hd);
+			corm_close(hd);
 		}
 		
 		printf("  %4d duplicates (avg of 100 runs): %.4f ms\n", 
@@ -267,27 +267,27 @@ void check_memory(void)
 	BENCH("Memory usage check");
 	
 	/* Create large map with many duplicates */
-	uint32_t hd = qmap_open(NULL, NULL, QM_U32, QM_U32, 16383, QM_MULTIVALUE | QM_SORTED);
+	uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_U32, 16383, CM_MULTIVALUE | CM_SORTED);
 	
 	printf("  Adding 10,000 duplicates...\n");
 	for (int i = 0; i < 10000; i++) {
 		uint32_t key = 100;
 		uint32_t value = (uint32_t)i;
-		qmap_put(hd, &key, &value);
+		corm_put(hd, &key, &value);
 	}
 	
 	{
 		uint32_t key = 100;
-		size_t count = qmap_count(hd, &key);
+		size_t count = corm_count(hd, &key);
 		printf("  Verified count: %zu\n", count);
 		
 		printf("  Iterating through all entries...\n");
-		uint32_t cur = qmap_iter(hd, &key, 0);
+		uint32_t cur = corm_iter(hd, &key, 0);
 		size_t iter_count = 0;
 		const void *k, *v;
-		while (qmap_next(&k, &v, cur))
+		while (corm_next(&k, &v, cur))
 			iter_count++;
-		qmap_fin(cur);
+		corm_fin(cur);
 		
 		printf("  Iterator count: %zu\n", iter_count);
 		
@@ -297,12 +297,12 @@ void check_memory(void)
 			printf("  ✗ Mismatch detected!\n");
 	}
 	
-	qmap_close(hd);
+	corm_close(hd);
 }
 
 int main(void)
 {
-	printf("=== QM_MULTIVALUE Performance Benchmarks ===\n");
+	printf("=== CM_MULTIVALUE Performance Benchmarks ===\n");
 	printf("Version: v0.7.0 + refactoring\n");
 	printf("Date: Mon Feb 23 2026\n");
 	

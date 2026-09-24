@@ -1,2 +1,3 @@
-PROJECT_NAME           = "Qmap"
+PROJECT_NAME           = "corm"
 @INCLUDE = ../mk/Doxyfile
+EXCLUDE                = src/rec_cli.c src/test_extended.c

@@ -1,7 +1,7 @@
 #!/bin/sh -e
 
 export LD_LIBRARY_PATH=./lib:$LD_LIBRARY_PATH
-qmap=./bin/qmap
+corm=./bin/corm
 
 assert() {
 	file=snap/$1.txt
@@ -21,82 +21,86 @@ rm *.db 2>/dev/null || true
 ./bin/test_extended
 ./bin/test_multivalue
 ./bin/test_record
+./bin/rec_test
+./bin/rec_axis_test
+./bin/rec_axis_store_test
+./bin/rec_cli_test
 
 adb=a.db:a:u
 bdb=b.db:a
 sdb=s.db
 cdb=c.db:2u:u
 ddb=d.db
-assert 0 $qmap -p 0:1 $adb
-assert 01v $qmap -p hi -p hello $bdb
-assert 01 $qmap -l $adb
-assert 1hello0hi $qmap -l $bdb
+assert 0 $corm -p 0:1 $adb
+assert 01v $corm -p hi -p hello $bdb
+assert 01 $corm -l $adb
+assert 1hello0hi $corm -l $bdb
 
-assert none $qmap -g hallo $bdb
-assert 0 $qmap -g hi $bdb
-assert none $qmap -g 2 $bdb
-assert none $qmap -g 0 $bdb
+assert none $corm -g hallo $bdb
+assert 0 $corm -g hi $bdb
+assert none $corm -g 2 $bdb
+assert none $corm -g 0 $bdb
 
-assert justhi $qmap -rg hallo $bdb
-assert justhi $qmap -rg hi $bdb
-assert none $qmap -rg 2 $bdb
-assert justhi $qmap -rg 0 $bdb
+assert justhi $corm -rg hallo $bdb
+assert justhi $corm -rg hi $bdb
+assert none $corm -rg 2 $bdb
+assert justhi $corm -rg 0 $bdb
 
-assert 0 $qmap -q $bdb -g hi $bdb # 0 key
-assert 0 $qmap -q $bdb -g hallo $bdb # 0 key
-assert none $qmap -q $bdb -g 2 $bdb
-assert 0 $qmap -q $bdb -g 0 $bdb
+assert 0 $corm -q $bdb -g hi $bdb # 0 key
+assert 0 $corm -q $bdb -g hallo $bdb # 0 key
+assert none $corm -q $bdb -g 2 $bdb
+assert 0 $corm -q $bdb -g 0 $bdb
 
-assert justhi $qmap -q $bdb -rg hi $bdb
-assert none $qmap -q $bdb -rg hallo $bdb
-assert none $qmap -q $bdb -rg 2 $bdb
-assert none $qmap -q $bdb -rg 0 $bdb
+assert justhi $corm -q $bdb -rg hi $bdb
+assert none $corm -q $bdb -rg hallo $bdb
+assert none $corm -q $bdb -rg 2 $bdb
+assert none $corm -q $bdb -rg 0 $bdb
 
-assert 0 $qmap -q $bdb -q $bdb -g hi $bdb
-assert none $qmap -q $bdb -q $bdb -g hallo $bdb
-assert none $qmap -q $bdb -q $bdb -g 2 $bdb
-assert none $qmap -q $bdb -q $bdb -g 0 $bdb
+assert 0 $corm -q $bdb -q $bdb -g hi $bdb
+assert none $corm -q $bdb -q $bdb -g hallo $bdb
+assert none $corm -q $bdb -q $bdb -g 2 $bdb
+assert none $corm -q $bdb -q $bdb -g 0 $bdb
 
-assert justhi $qmap -q $bdb -q $bdb -rg hi $bdb
-assert justhi $qmap -q $bdb -q $bdb -rg hallo $bdb
-assert none $qmap -q $bdb -q $bdb -rg 2 $bdb
-assert justhi $qmap -q $bdb -q $bdb -rg 0 $bdb
+assert justhi $corm -q $bdb -q $bdb -rg hi $bdb
+assert justhi $corm -q $bdb -q $bdb -rg hallo $bdb
+assert none $corm -q $bdb -q $bdb -rg 2 $bdb
+assert justhi $corm -q $bdb -q $bdb -rg 0 $bdb
 
-assert hikey $qmap -p 'hi:Hi how are you' $sdb
-assert hi $qmap -l $sdb
-assert hi2key $qmap -p 'hi2:Hi how are you 2' $sdb
-assert empty $qmap -rd 'hi2' $sdb
-assert hi $qmap -l $sdb
-assert hi2key $qmap -p 'hi2:Hi how are you 2' $sdb
-assert empty $qmap -d 'Hi how are you 2' $sdb
-assert hi $qmap -l $sdb
+assert hikey $corm -p 'hi:Hi how are you' $sdb
+assert hi $corm -l $sdb
+assert hi2key $corm -p 'hi2:Hi how are you 2' $sdb
+assert empty $corm -rd 'hi2' $sdb
+assert hi $corm -l $sdb
+assert hi2key $corm -p 'hi2:Hi how are you 2' $sdb
+assert empty $corm -d 'Hi how are you 2' $sdb
+assert hi $corm -l $sdb
 
 # FIXME No DUP PRIMARY support yet
-assert 50 $qmap -p 5:9 -p 0:1 $cdb # but this still works
-# assert missing $qmap -q $adb -L $cdb
-# assert empty $qmap -q $cdb -L $adb
-# assert 01 $qmap -q $cdb -rL $adb
-assert 5 $qmap -p 5:9 $adb
-assert empty $qmap -d 9 $adb
-assert 01 $qmap -l $adb
-assert 5 $qmap -p 5:9 $adb
-assert empty $qmap -d 5:9 $adb
-assert 01 $qmap -l $adb
-assert 5 $qmap -p 5:9 $adb
-assert empty $qmap -rd 9:5 $adb
-assert 01 $qmap -l $adb
-assert 55 $qmap -p 5:9 -p 5:8 $adb
-assert empty $qmap -rd 5 $adb
-assert 01 $qmap -l $adb
+assert 50 $corm -p 5:9 -p 0:1 $cdb # but this still works
+# assert missing $corm -q $adb -L $cdb
+# assert empty $corm -q $cdb -L $adb
+# assert 01 $corm -q $cdb -rL $adb
+assert 5 $corm -p 5:9 $adb
+assert empty $corm -d 9 $adb
+assert 01 $corm -l $adb
+assert 5 $corm -p 5:9 $adb
+assert empty $corm -d 5:9 $adb
+assert 01 $corm -l $adb
+assert 5 $corm -p 5:9 $adb
+assert empty $corm -rd 9:5 $adb
+assert 01 $corm -l $adb
+assert 55 $corm -p 5:9 -p 5:8 $adb
+assert empty $corm -rd 5 $adb
+assert 01 $corm -l $adb
 
-assert assoc $qmap -a $sdb -rl $bdb
-assert assoc-bail $qmap -a $bdb -l $adb
-assert assoc3 $qmap -a $bdb -a $sdb -l $adb
-assert assoc-bail $qmap -xa $bdb -a $sdb -l $adb
-assert assoc-bail2 $qmap -xa $bdb -a $sdb -rl $adb
+assert assoc $corm -a $sdb -rl $bdb
+assert assoc-bail $corm -a $bdb -l $adb
+assert assoc3 $corm -a $bdb -a $sdb -l $adb
+assert assoc-bail $corm -xa $bdb -a $sdb -l $adb
+assert assoc-bail2 $corm -xa $bdb -a $sdb -rl $adb
 
-assert hikey $qmap -p hi:Hello2 $ddb
-assert hi2key $qmap -p hi2:Hello3 $ddb
+assert hikey $corm -p hi:Hello2 $ddb
+assert hi2key $corm -p hi2:Hello3 $ddb
 assert xxd-1 xxd $ddb
 
 # TODO test random (normal and reverse?)

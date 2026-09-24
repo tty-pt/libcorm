@@ -1,5 +1,5 @@
 /* Test with exact field layout from real song registration */
-#include "./../include/ttypt/qmap.h"
+#include "./../include/ttypt/corm.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -46,75 +46,75 @@ int main(void)
   fprintf(stderr, "sizeof(song_cache_t) = %zu\n", SONG_CACHE_SIZE);
 
   /* Register song_type record first */
-  qmap_record_field_t type_fields[] = {
-    { "name",  QM_STR, offsetof(song_type_cache_t, name),
+  corm_record_field_t type_fields[] = {
+    { "name",  CM_STR, offsetof(song_type_cache_t, name),
       sizeof(((song_type_cache_t*)0)->name) },
-    { "songs", QM_MULTI_REFERENCE, offsetof(song_type_cache_t, songs),
+    { "songs", CM_MULTI_REFERENCE, offsetof(song_type_cache_t, songs),
       sizeof(((song_type_cache_t*)0)->songs) },
   };
-  uint32_t type_rec = qmap_record_register("song_type",
+  uint32_t type_rec = corm_record_register("song_type",
       sizeof(song_type_cache_t), type_fields, 2);
 
   /* Register song record — match real app field list exactly:
    * id, title, type(MULTI_REF), author, yt, audio, pdf, data(VSTR), owner
    * Target record must be set BEFORE registration. */
-  qmap_record_field_t song_fields[] = {
-    { "id",     QM_STR, offsetof(song_cache_t, id),
+  corm_record_field_t song_fields[] = {
+    { "id",     CM_STR, offsetof(song_cache_t, id),
       sizeof(((song_cache_t*)0)->id) },
-    { "title",  QM_STR, offsetof(song_cache_t, title),
+    { "title",  CM_STR, offsetof(song_cache_t, title),
       sizeof(((song_cache_t*)0)->title) },
-    { "type",   QM_MULTI_REFERENCE, offsetof(song_cache_t, type),
+    { "type",   CM_MULTI_REFERENCE, offsetof(song_cache_t, type),
       sizeof(((song_cache_t*)0)->type), .target_record = 0 },
-    { "author", QM_STR, offsetof(song_cache_t, author),
+    { "author", CM_STR, offsetof(song_cache_t, author),
       sizeof(((song_cache_t*)0)->author) },
-    { "yt",     QM_STR, offsetof(song_cache_t, yt),
+    { "yt",     CM_STR, offsetof(song_cache_t, yt),
       sizeof(((song_cache_t*)0)->yt) },
-    { "audio",  QM_STR, offsetof(song_cache_t, audio),
+    { "audio",  CM_STR, offsetof(song_cache_t, audio),
       sizeof(((song_cache_t*)0)->audio) },
-    { "pdf",    QM_STR, offsetof(song_cache_t, pdf),
+    { "pdf",    CM_STR, offsetof(song_cache_t, pdf),
       sizeof(((song_cache_t*)0)->pdf) },
-    { "data",   0, 0, 0, .type = 1 /*QM_VSTR placeholder for source_def_to_qmap */ },
-    { "owner",  QM_STR, offsetof(song_cache_t, owner),
+    { "data",   0, 0, 0, .type = 1 /*CM_VSTR placeholder for source_def_to_corm */ },
+    { "owner",  CM_STR, offsetof(song_cache_t, owner),
       sizeof(((song_cache_t*)0)->owner) },
   };
   /* Set target_record for the type field */
   song_fields[2].target_record = type_rec;
 
-  uint32_t song_rec = qmap_record_register("song",
+  uint32_t song_rec = corm_record_register("song",
       SONG_CACHE_SIZE, song_fields, 9);
 
   /* Open type maps */
-  uint32_t type_fields_hd = qmap_open(NULL, NULL, QM_STR,
-      qmap_record_type_id(type_rec), 0x3FF,
-      QM_RECORD(type_rec) | QM_SORTED);
+  uint32_t type_fields_hd = corm_open(NULL, NULL, CM_STR,
+      corm_record_type_id(type_rec), 0x3FF,
+      CM_RECORD(type_rec) | CM_SORTED);
 
-  /* Open song maps — fields_hd with QM_RECORD + QM_SORTED */
-  uint32_t song_fields_hd = qmap_open(NULL, NULL, QM_STR,
-      qmap_record_type_id(song_rec), 0x3FF,
-      QM_RECORD(song_rec) | QM_SORTED);
+  /* Open song maps — fields_hd with CM_RECORD + CM_SORTED */
+  uint32_t song_fields_hd = corm_open(NULL, NULL, CM_STR,
+      corm_record_type_id(song_rec), 0x3FF,
+      CM_RECORD(song_rec) | CM_SORTED);
 
-  qmap_record_field_set_target_hd(song_rec, "type", type_fields_hd);
+  corm_record_field_set_target_hd(song_rec, "type", type_fields_hd);
 
   fprintf(stderr, "song_rec=%u song_fields_hd=%u\n", song_rec, song_fields_hd);
 
   /* Put type entries first */
   song_type_cache_t tp = { .name = "hymn" };
-  qmap_put(type_fields_hd, "hymn", &tp);
+  corm_put(type_fields_hd, "hymn", &tp);
   strcpy(tp.name, "worship");
-  qmap_put(type_fields_hd, "worship", &tp);
+  corm_put(type_fields_hd, "worship", &tp);
 
   /* Reproduce exact source_scan_item sequence for "amazing_grace" */
   fprintf(stderr, "\n=== Reproduce source_scan_item ===\n");
 
   /* Step 1: id field */
-  qmap_field_put(song_fields_hd, "amazing_grace", "id", "amazing_grace");
-  const char *v = qmap_field_get(song_fields_hd, "amazing_grace", "id");
+  corm_field_put(song_fields_hd, "amazing_grace", "id", "amazing_grace");
+  const char *v = corm_field_get(song_fields_hd, "amazing_grace", "id");
   fprintf(stderr, "after id put: verify='%s' %s\n",
           v ? v : "(NULL)", (v && strcmp(v, "amazing_grace") == 0) ? "OK" : "FAIL");
 
   /* Step 2: title field */
-  qmap_field_put(song_fields_hd, "amazing_grace", "title", "Amazing Grace");
-  v = qmap_field_get(song_fields_hd, "amazing_grace", "title");
+  corm_field_put(song_fields_hd, "amazing_grace", "title", "Amazing Grace");
+  v = corm_field_get(song_fields_hd, "amazing_grace", "title");
   fprintf(stderr, "after title put: verify='%s' %s\n",
           v ? v : "(NULL)", (v && strcmp(v, "Amazing Grace") == 0) ? "OK" : "FAIL");
   if (!v || strcmp(v, "Amazing Grace") != 0) {
@@ -124,14 +124,14 @@ int main(void)
   }
 
   /* Step 3: type field (MULTI_REF) */
-  qmap_field_put(song_fields_hd, "amazing_grace", "type", "hymn");
-  v = qmap_field_get(song_fields_hd, "amazing_grace", "type");
+  corm_field_put(song_fields_hd, "amazing_grace", "type", "hymn");
+  v = corm_field_get(song_fields_hd, "amazing_grace", "type");
   fprintf(stderr, "after type put: verify='%s' %s\n",
           v ? v : "(NULL)", (v && strlen(v) > 0) ? "OK" : "FAIL");
 
   /* Step 4: author field */
-  qmap_field_put(song_fields_hd, "amazing_grace", "author", "John Newton");
-  v = qmap_field_get(song_fields_hd, "amazing_grace", "author");
+  corm_field_put(song_fields_hd, "amazing_grace", "author", "John Newton");
+  v = corm_field_get(song_fields_hd, "amazing_grace", "author");
   fprintf(stderr, "after author put: verify='%s' %s\n",
           v ? v : "(NULL)", (v && strcmp(v, "John Newton") == 0) ? "OK" : "FAIL");
   if (!v || strcmp(v, "John Newton") != 0) {
@@ -140,7 +140,7 @@ int main(void)
   }
 
   /* Re-check title after all puts */
-  v = qmap_field_get(song_fields_hd, "amazing_grace", "title");
+  v = corm_field_get(song_fields_hd, "amazing_grace", "title");
   fprintf(stderr, "final title check: '%s' %s\n",
           v ? v : "(NULL)", (v && strcmp(v, "Amazing Grace") == 0) ? "OK" : "FAIL");
   if (!v || strcmp(v, "Amazing Grace") != 0) {
@@ -151,15 +151,15 @@ int main(void)
 
   /* Test 2: second item */
   fprintf(stderr, "\n=== Second item ===\n");
-  qmap_field_put(song_fields_hd, "how_great", "id", "how_great");
-  qmap_field_put(song_fields_hd, "how_great", "title", "How Great Thou Art");
-  v = qmap_field_get(song_fields_hd, "how_great", "title");
+  corm_field_put(song_fields_hd, "how_great", "id", "how_great");
+  corm_field_put(song_fields_hd, "how_great", "title", "How Great Thou Art");
+  v = corm_field_get(song_fields_hd, "how_great", "title");
   fprintf(stderr, "title: '%s' %s\n",
           v ? v : "(NULL)", (v && strcmp(v, "How Great Thou Art") == 0) ? "OK" : "FAIL");
   if (!v || strcmp(v, "How Great Thou Art") != 0) errors++;
 
   /* Re-check first item again */
-  v = qmap_field_get(song_fields_hd, "amazing_grace", "title");
+  v = corm_field_get(song_fields_hd, "amazing_grace", "title");
   fprintf(stderr, "re-check first: '%s' %s\n",
           v ? v : "(NULL)", (v && strcmp(v, "Amazing Grace") == 0) ? "OK" : "FAIL");
   if (!v || strcmp(v, "Amazing Grace") != 0) {
@@ -173,7 +173,7 @@ int main(void)
   else
     printf("%u TEST(S) FAILED\n", errors);
 
-  qmap_close(song_fields_hd);
-  qmap_close(type_fields_hd);
+  corm_close(song_fields_hd);
+  corm_close(type_fields_hd);
   return errors == 0 ? 0 : 1;
 }

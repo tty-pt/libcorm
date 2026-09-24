@@ -3,5 +3,5 @@
 /src/*.o
 *.d
 /*.db
-/*.qmap
+/*.corm
 /man

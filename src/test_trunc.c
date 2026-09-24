@@ -1,11 +1,11 @@
-#include "./../include/ttypt/qmap.h"
+#include "./../include/ttypt/corm.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
 
-/* Reproduce the bug: struct > QMAP_POOL_MAX (4096).
+/* Reproduce the bug: struct > CORM_POOL_MAX (4096).
  * song_cache_t is 4256 bytes. We replicate that. */
 typedef struct {
   char id[128];
@@ -32,29 +32,29 @@ int main(void)
   int errors = 0;
 
   fprintf(stderr, "sizeof(big_cache_t) = %zu\n", sizeof(big_cache_t));
-  fprintf(stderr, "QMAP_POOL_MAX = 4096\n");
-  fprintf(stderr, "Struct %s QMAP_POOL_MAX\n",
+  fprintf(stderr, "CORM_POOL_MAX = 4096\n");
+  fprintf(stderr, "Struct %s CORM_POOL_MAX\n",
           sizeof(big_cache_t) > 4096 ? "EXCEEDS" : "fits within");
 
-  qmap_record_field_t fields[] = {
-    { "id",     QM_STR, offsetof(big_cache_t, id),     sizeof(((big_cache_t*)0)->id)     },
-    { "title",  QM_STR, offsetof(big_cache_t, title),  sizeof(((big_cache_t*)0)->title)  },
-    { "author", QM_STR, offsetof(big_cache_t, author), sizeof(((big_cache_t*)0)->author) },
+  corm_record_field_t fields[] = {
+    { "id",     CM_STR, offsetof(big_cache_t, id),     sizeof(((big_cache_t*)0)->id)     },
+    { "title",  CM_STR, offsetof(big_cache_t, title),  sizeof(((big_cache_t*)0)->title)  },
+    { "author", CM_STR, offsetof(big_cache_t, author), sizeof(((big_cache_t*)0)->author) },
   };
-  uint32_t rec = qmap_record_register("big_test", sizeof(big_cache_t), fields, 3);
-  uint32_t hd = qmap_open(NULL, NULL, QM_STR, qmap_record_type_id(rec),
-                          0xFF, QM_RECORD(rec));
+  uint32_t rec = corm_record_register("big_test", sizeof(big_cache_t), fields, 3);
+  uint32_t hd = corm_open(NULL, NULL, CM_STR, corm_record_type_id(rec),
+                          0xFF, CM_RECORD(rec));
   fprintf(stderr, "rec=%u hd=%u\n", rec, hd);
 
-  /* Test 1: qmap_field_put then qmap_field_get — the exact failing path */
+  /* Test 1: corm_field_put then corm_field_get — the exact failing path */
   fprintf(stderr, "\n=== Test 1: field_put + field_get (reproduces bug) ===\n");
-  qmap_field_put(hd, "amazing_grace", "id", "amazing_grace");
-  qmap_field_put(hd, "amazing_grace", "title", "Amazing Grace");
-  qmap_field_put(hd, "amazing_grace", "author", "John Newton");
+  corm_field_put(hd, "amazing_grace", "id", "amazing_grace");
+  corm_field_put(hd, "amazing_grace", "title", "Amazing Grace");
+  corm_field_put(hd, "amazing_grace", "author", "John Newton");
 
-  const char *got_id = qmap_field_get(hd, "amazing_grace", "id");
-  const char *got_title = qmap_field_get(hd, "amazing_grace", "title");
-  const char *got_author = qmap_field_get(hd, "amazing_grace", "author");
+  const char *got_id = corm_field_get(hd, "amazing_grace", "id");
+  const char *got_title = corm_field_get(hd, "amazing_grace", "title");
+  const char *got_author = corm_field_get(hd, "amazing_grace", "author");
 
   fprintf(stderr, "id:     got='%s' expected='amazing_grace' %s\n",
           got_id ? got_id : "(NULL)",
@@ -89,9 +89,9 @@ int main(void)
   strcpy(s2.id, "hymn2");
   strcpy(s2.title, "How Great Thou Art");
   strcpy(s2.author, "Carl Boberg");
-  qmap_put(hd, "hymn2", &s2);
+  corm_put(hd, "hymn2", &s2);
 
-  got_title = qmap_get(hd, "hymn2:title");
+  got_title = corm_get(hd, "hymn2:title");
   fprintf(stderr, "title:  got='%s' expected='How Great Thou Art' %s\n",
           got_title ? got_title : "(NULL)",
           (got_title && strcmp(got_title, "How Great Thou Art") == 0) ? "OK" : "FAIL");
@@ -103,8 +103,8 @@ int main(void)
 
   /* Test 3: field_put then overwrite, then field_get */
   fprintf(stderr, "\n=== Test 3: overwrite field twice ===\n");
-  qmap_field_put(hd, "hymn2", "title", "How Great Thou Art v2");
-  got_title = qmap_field_get(hd, "hymn2", "title");
+  corm_field_put(hd, "hymn2", "title", "How Great Thou Art v2");
+  got_title = corm_field_get(hd, "hymn2", "title");
   fprintf(stderr, "title:  got='%s' expected='How Great Thou Art v2' %s\n",
           got_title ? got_title : "(NULL)",
           (got_title && strcmp(got_title, "How Great Thou Art v2") == 0) ? "OK" : "FAIL");
@@ -113,10 +113,10 @@ int main(void)
     errors++;
   }
 
-  /* Test 4: raw qmap_put/get with composite key (bypass field_put) */
-  fprintf(stderr, "\n=== Test 4: raw qmap_put with composite key ===\n");
-  qmap_put(hd, "raw_test:title", "Raw Title Value");
-  got_title = qmap_get(hd, "raw_test:title");
+  /* Test 4: raw corm_put/get with composite key (bypass field_put) */
+  fprintf(stderr, "\n=== Test 4: raw corm_put with composite key ===\n");
+  corm_put(hd, "raw_test:title", "Raw Title Value");
+  got_title = corm_get(hd, "raw_test:title");
   fprintf(stderr, "title:  got='%s' expected='Raw Title Value' %s\n",
           got_title ? got_title : "(NULL)",
           (got_title && strcmp(got_title, "Raw Title Value") == 0) ? "OK" : "FAIL");
@@ -127,9 +127,9 @@ int main(void)
   }
 
   fprintf(stderr, "\n=== Test 5: field_put on empty map (create + fill) ===\n");
-  qmap_field_put(hd, "new_item", "id", "new_item");
-  qmap_field_put(hd, "new_item", "title", "Brand New Song");
-  got_title = qmap_field_get(hd, "new_item", "title");
+  corm_field_put(hd, "new_item", "id", "new_item");
+  corm_field_put(hd, "new_item", "title", "Brand New Song");
+  got_title = corm_field_get(hd, "new_item", "title");
   fprintf(stderr, "title:  got='%s' expected='Brand New Song' %s\n",
           got_title ? got_title : "(NULL)",
           (got_title && strcmp(got_title, "Brand New Song") == 0) ? "OK" : "FAIL");
@@ -144,6 +144,6 @@ int main(void)
   else
     printf("%u TRUNCATION TEST(S) FAILED\n", errors);
 
-  qmap_close(hd);
+  corm_close(hd);
   return errors == 0 ? 0 : 1;
 }

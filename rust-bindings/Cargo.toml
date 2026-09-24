@@ -1,10 +1,10 @@
 [package]
-name = "qmap-rs"
+name = "corm-rs"
 version = "0.1.0"
 edition = "2021"
-description = "Rust bindings for qmap"
+description = "Rust bindings for corm"
 license = "BSD-2-Clause"
-repository = "https://github.com/quirinpa/qmap"
+repository = "https://github.com/quirinpa/corm"
 
 [lib]
 crate-type = ["rlib"]

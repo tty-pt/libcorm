@@ -3,8 +3,8 @@ exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
 
-Name: qmaplib
+Name: cormlib
 Description: Simple hashtable library
 Version: 0.6.0
-Libs: -L${libdir} -lqmap -lxxhash
-Cflags: -I${includedir}/qmaplib
+Libs: -L${libdir} -lcorm -lxxhash
+Cflags: -I${includedir}/cormlib

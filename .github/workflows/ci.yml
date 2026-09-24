@@ -9,7 +9,7 @@ jobs:
   build:
     uses: tty-pt/ci/.github/workflows/all-in-one.yml@main
     with:
-      name: libqmap
+      name: libcorm
       publish_to: "deb,apk,rpm,brew,openbsd,winget"
       deps: "libqsys,libxxhash-dev"
       deps_apk: "libqsys,xxhash-dev"

@@ -3,10 +3,10 @@
 
 /**
  * @file idm.h
- * @brief ID and index management utilities for Qmap.
+ * @brief ID and index management utilities for Corm.
  *
  * Provides linked-list–based tracking of reusable integer
- * IDs and index allocation routines used internally by Qmap.
+ * IDs and index allocation routines used internally by Corm.
  *
  * License: BSD-2-Clause
  */

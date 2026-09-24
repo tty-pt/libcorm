@@ -1,12 +1,12 @@
 fn main() {
-    // Link against libqmap — the C library must be installed separately.
-    // Use QMAP_DIR to point to a custom installation (e.g. QMAP_DIR=/usr/local).
-    if let Ok(dir) = std::env::var("QMAP_DIR") {
+    // Link against libcorm — the C library must be installed separately.
+    // Use CORM_DIR to point to a custom installation (e.g. CORM_DIR=/usr/local).
+    if let Ok(dir) = std::env::var("CORM_DIR") {
         println!("cargo:rustc-link-search={}/lib", dir);
     }
-    println!("cargo:rustc-link-lib=qmap");
+    println!("cargo:rustc-link-lib=corm");
 
-    // Rebuild when this script or QMAP_DIR changes.
+    // Rebuild when this script or CORM_DIR changes.
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-env-changed=QMAP_DIR");
+    println!("cargo:rerun-if-env-changed=CORM_DIR");
 }

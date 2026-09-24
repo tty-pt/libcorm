@@ -1,6 +1,6 @@
 /* Test closer to real app setup: multiple record types, associations,
- * QM_SORTED on row_hd, etc. */
-#include "./../include/ttypt/qmap.h"
+ * CM_SORTED on row_hd, etc. */
+#include "./../include/ttypt/corm.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -40,74 +40,74 @@ int main(void)
   fprintf(stderr, "sizeof(song_type_cache_t) = %zu\n", sizeof(song_type_cache_t));
 
   /* Register song_type record first (as the real app does) */
-  qmap_record_field_t type_fields[] = {
-    { "name",  QM_STR, offsetof(song_type_cache_t, name),
+  corm_record_field_t type_fields[] = {
+    { "name",  CM_STR, offsetof(song_type_cache_t, name),
       sizeof(((song_type_cache_t*)0)->name) },
-    { "songs", QM_MULTI_REFERENCE, offsetof(song_type_cache_t, songs),
+    { "songs", CM_MULTI_REFERENCE, offsetof(song_type_cache_t, songs),
       sizeof(((song_type_cache_t*)0)->songs) },
   };
-  uint32_t type_rec = qmap_record_register("song_type",
+  uint32_t type_rec = corm_record_register("song_type",
       sizeof(song_type_cache_t), type_fields, 2);
   fprintf(stderr, "type_rec=%u\n", type_rec);
 
   /* Register song record */
-  qmap_record_field_t song_fields[] = {
-    { "id",     QM_STR, offsetof(song_cache_t, id),
+  corm_record_field_t song_fields[] = {
+    { "id",     CM_STR, offsetof(song_cache_t, id),
       sizeof(((song_cache_t*)0)->id) },
-    { "title",  QM_STR, offsetof(song_cache_t, title),
+    { "title",  CM_STR, offsetof(song_cache_t, title),
       sizeof(((song_cache_t*)0)->title) },
-    { "type",   QM_MULTI_REFERENCE, offsetof(song_cache_t, type),
+    { "type",   CM_MULTI_REFERENCE, offsetof(song_cache_t, type),
       sizeof(((song_cache_t*)0)->type) },
-    { "author", QM_STR, offsetof(song_cache_t, author),
+    { "author", CM_STR, offsetof(song_cache_t, author),
       sizeof(((song_cache_t*)0)->author) },
   };
-  uint32_t song_rec = qmap_record_register("song",
+  uint32_t song_rec = corm_record_register("song",
       sizeof(song_cache_t), song_fields, 4);
   fprintf(stderr, "song_rec=%u\n", song_rec);
 
   /* Set target_record for the type field BEFORE registration */
   song_fields[2].target_record = type_rec;
 
-  /* Open song_type fields_hd (with QM_SORTED as real app does) */
-  uint32_t type_fields_hd = qmap_open(NULL, NULL, QM_STR,
-      qmap_record_type_id(type_rec), 0x3FF, QM_RECORD(type_rec) | QM_SORTED);
+  /* Open song_type fields_hd (with CM_SORTED as real app does) */
+  uint32_t type_fields_hd = corm_open(NULL, NULL, CM_STR,
+      corm_record_type_id(type_rec), 0x3FF, CM_RECORD(type_rec) | CM_SORTED);
   fprintf(stderr, "type_fields_hd=%u\n", type_fields_hd);
 
   /* Open song_type data_hd (row_hd) */
-  uint32_t type_data_hd = qmap_open(NULL, NULL, QM_STR,
-      qmap_record_type_id(type_rec), 0x3FF, QM_SORTED);
+  uint32_t type_data_hd = corm_open(NULL, NULL, CM_STR,
+      corm_record_type_id(type_rec), 0x3FF, CM_SORTED);
   fprintf(stderr, "type_data_hd=%u\n", type_data_hd);
 
   /* Set target_hd for type field */
-  qmap_record_field_set_target_hd(song_rec, "type", type_fields_hd);
+  corm_record_field_set_target_hd(song_rec, "type", type_fields_hd);
 
-  /* Open song fields_hd (with QM_SORTED as real app does) */
-  uint32_t song_fields_hd = qmap_open(NULL, NULL, QM_STR,
-      qmap_record_type_id(song_rec), 0x3FF, QM_RECORD(song_rec) | QM_SORTED);
+  /* Open song fields_hd (with CM_SORTED as real app does) */
+  uint32_t song_fields_hd = corm_open(NULL, NULL, CM_STR,
+      corm_record_type_id(song_rec), 0x3FF, CM_RECORD(song_rec) | CM_SORTED);
   fprintf(stderr, "song_fields_hd=%u\n", song_fields_hd);
 
   /* Open song data_hd */
-  uint32_t song_data_hd = qmap_open(NULL, NULL, QM_STR,
-      qmap_record_type_id(song_rec), 0x3FF, QM_SORTED);
+  uint32_t song_data_hd = corm_open(NULL, NULL, CM_STR,
+      corm_record_type_id(song_rec), 0x3FF, CM_SORTED);
   fprintf(stderr, "song_data_hd=%u\n", song_data_hd);
 
   /* Put some type entries first */
   song_type_cache_t tp;
   memset(&tp, 0, sizeof(tp));
   strcpy(tp.name, "hymn");
-  qmap_put(type_data_hd, "hymn", &tp);
+  corm_put(type_data_hd, "hymn", &tp);
   strcpy(tp.name, "worship");
-  qmap_put(type_data_hd, "worship", &tp);
+  corm_put(type_data_hd, "worship", &tp);
 
   /* Now do the same sequence as source_scan_item */
   fprintf(stderr, "\n=== Test: field_put + field_get with full app setup ===\n");
-  qmap_field_put(song_fields_hd, "amazing_grace", "id", "amazing_grace");
-  qmap_field_put(song_fields_hd, "amazing_grace", "title", "Amazing Grace");
-  qmap_field_put(song_fields_hd, "amazing_grace", "type", "hymn");
-  qmap_field_put(song_fields_hd, "amazing_grace", "author", "John Newton");
+  corm_field_put(song_fields_hd, "amazing_grace", "id", "amazing_grace");
+  corm_field_put(song_fields_hd, "amazing_grace", "title", "Amazing Grace");
+  corm_field_put(song_fields_hd, "amazing_grace", "type", "hymn");
+  corm_field_put(song_fields_hd, "amazing_grace", "author", "John Newton");
 
   const char *got;
-  got = qmap_field_get(song_fields_hd, "amazing_grace", "title");
+  got = corm_field_get(song_fields_hd, "amazing_grace", "title");
   fprintf(stderr, "title:  got='%s' expected='Amazing Grace' %s\n",
           got ? got : "(NULL)",
           (got && strcmp(got, "Amazing Grace") == 0) ? "OK" : "FAIL");
@@ -117,7 +117,7 @@ int main(void)
     errors++;
   }
 
-  got = qmap_field_get(song_fields_hd, "amazing_grace", "author");
+  got = corm_field_get(song_fields_hd, "amazing_grace", "author");
   fprintf(stderr, "author: got='%s' expected='John Newton' %s\n",
           got ? got : "(NULL)",
           (got && strcmp(got, "John Newton") == 0) ? "OK" : "FAIL");
@@ -127,7 +127,7 @@ int main(void)
   }
 
   /* Verify whole struct */
-  const song_cache_t *whole = qmap_get(song_data_hd, "amazing_grace");
+  const song_cache_t *whole = corm_get(song_data_hd, "amazing_grace");
   fprintf(stderr, "whole struct: %s\n", whole ? "found" : "NOT FOUND");
   if (whole) {
     fprintf(stderr, "  id=%s title=%s author=%s\n",
@@ -139,7 +139,7 @@ int main(void)
     }
   }
 
-  /* Now try qmap_field_put on the song.data vstr field */
+  /* Now try corm_field_put on the song.data vstr field */
   fprintf(stderr, "\n=== Test: VSTR field put ===\n");
   /* We need to register a VSTR field. Let's use a simpler approach. */
 
@@ -149,9 +149,9 @@ int main(void)
   else
     printf("%u TEST(S) FAILED\n", errors);
 
-  qmap_close(song_data_hd);
-  qmap_close(song_fields_hd);
-  qmap_close(type_data_hd);
-  qmap_close(type_fields_hd);
+  corm_close(song_data_hd);
+  corm_close(song_fields_hd);
+  corm_close(type_data_hd);
+  corm_close(type_fields_hd);
   return errors == 0 ? 0 : 1;
 }

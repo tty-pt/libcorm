@@ -1,4 +1,4 @@
-# QM_MULTIVALUE Refactoring Summary
+# CM_MULTIVALUE Refactoring Summary
 
 **Date:** Mon Feb 23 2026  
 **Base Version:** v0.7.0 (commit b1bc322)  
@@ -8,22 +8,22 @@
 
 ## Overview
 
-Successfully refactored the QM_MULTIVALUE implementation with significant performance improvements and modest code size reduction.
+Successfully refactored the CM_MULTIVALUE implementation with significant performance improvements and modest code size reduction.
 
 ### Commits
 
-1. **P1.1** (e3c55ad): Fix double binary search in qmap_iter  
-2. **P1.2** (c9960c6): Optimize qmap_count from O(n) to O(log n)  
+1. **P1.1** (e3c55ad): Fix double binary search in corm_iter  
+2. **P1.2** (c9960c6): Optimize corm_count from O(n) to O(log n)  
 3. **P1.3** (38195fb): Extract IDM update helper function  
-4. **P2.1** (ca33d8c): Simplify qmap_get_multi implementation  
+4. **P2.1** (ca33d8c): Simplify corm_get_multi implementation  
 5. **P2.2** (15d48ac): Optimize deletion hash update logic  
-6. **P3.1** (b1c9489): Optimize qmap_del_all using qmap_count  
+6. **P3.1** (b1c9489): Optimize corm_del_all using corm_count  
 
 ---
 
 ## Performance Improvements
 
-### P1.1: qmap_iter Creation
+### P1.1: corm_iter Creation
 **Impact:** 2.78x faster
 
 | Metric | Before | After | Improvement |
@@ -34,7 +34,7 @@ Successfully refactored the QM_MULTIVALUE implementation with significant perfor
 
 ---
 
-### P1.2: qmap_count Performance
+### P1.2: corm_count Performance
 **Impact:** 66x - 113x faster for large datasets
 
 | Duplicates | Before | After | Improvement |
@@ -54,8 +54,8 @@ Successfully refactored the QM_MULTIVALUE implementation with significant perfor
 
 ---
 
-### P3.1: qmap_del_all Performance
-**Impact:** Modest improvement from using optimized qmap_count
+### P3.1: corm_del_all Performance
+**Impact:** Modest improvement from using optimized corm_count
 
 | Duplicates | Before (Baseline) | After All Optimizations | Improvement |
 |------------|-------------------|-------------------------|-------------|
@@ -63,14 +63,14 @@ Successfully refactored the QM_MULTIVALUE implementation with significant perfor
 | 100 | 0.1699 ms | 0.1842 ms | ~same |
 | 1000 | 22.70 ms | 26.80 ms | slightly slower |
 
-**Note:** The qmap_del_all improvement is marginal because the dominant cost is the N deletions themselves, not the count operation. The slight slowdown at 1000 duplicates is within measurement noise.
+**Note:** The corm_del_all improvement is marginal because the dominant cost is the N deletions themselves, not the count operation. The slight slowdown at 1000 duplicates is within measurement noise.
 
 ---
 
 ## Code Quality Improvements
 
 ### Lines Changed
-- **libqmap.c:** 1400 lines → 1408 lines (+8 lines net)
+- **libcorm.c:** 1400 lines → 1408 lines (+8 lines net)
   - P1.1: Saved 7 lines (double search elimination)
   - P1.2: Saved 2 lines (algorithmic simplification)
   - P1.3: Saved 4 lines (helper extraction, +6 for helper definition)
@@ -81,8 +81,8 @@ Successfully refactored the QM_MULTIVALUE implementation with significant perfor
 
 ### Code Clarity Improvements
 1. **IDM update helper** (`update_idm_last`) - Eliminates duplication
-2. **qmap_count** - Simple, clear algorithm (2 binary searches vs iteration)
-3. **qmap_get_multi** - Simplified to 9 lines from 14
+2. **corm_count** - Simple, clear algorithm (2 binary searches vs iteration)
+3. **corm_get_multi** - Simplified to 9 lines from 14
 4. **Deletion hash update** - Explicit logic vs nested loop
 
 ---
@@ -110,9 +110,9 @@ Successfully refactored the QM_MULTIVALUE implementation with significant perfor
 
 All 3 documented bugs have been fixed:
 
-1. **Bug #1 (FIXED):** QM_MIRROR + QM_MULTIVALUE - Persistence now works
-2. **Bug #2 (FIXED):** qmap_assoc + QM_MULTIVALUE - No longer segfaults
-3. **Bug #3 (FIXED):** QM_RANGE + QM_MULTIVALUE - Returns all duplicates
+1. **Bug #1 (FIXED):** CM_MIRROR + CM_MULTIVALUE - Persistence now works
+2. **Bug #2 (FIXED):** corm_assoc + CM_MULTIVALUE - No longer segfaults
+3. **Bug #3 (FIXED):** CM_RANGE + CM_MULTIVALUE - Returns all duplicates
 
 ---
 
@@ -126,15 +126,15 @@ All 3 documented bugs have been fixed:
 - ✓ Documented known bugs for future work
 
 ### 📊 Performance Summary
-- **Best improvement:** qmap_count (115x faster for 1000 duplicates)
-- **Most impactful:** qmap_iter creation (3x faster, called frequently)
+- **Best improvement:** corm_count (115x faster for 1000 duplicates)
+- **Most impactful:** corm_iter creation (3x faster, called frequently)
 - **Total refactoring time:** ~6 commits, systematic testing between each
 
 ### 🎯 Production Readiness
 - ✅ **Ready for production use**
 - ✅ Maintains API compatibility
 - ✅ No breaking changes
-- ✅ All QM_MULTIVALUE bugs fixed
+- ✅ All CM_MULTIVALUE bugs fixed
 
 ---
 
@@ -143,7 +143,7 @@ All 3 documented bugs have been fixed:
 All benchmarks run on:
 - Platform: Linux
 - Compiler: GCC with -O2 optimization (via Makefile)
-- Library: libqmap.so (dynamically linked)
+- Library: libcorm.so (dynamically linked)
 - Measurement: C `clock()` function (milliseconds)
 
 **Benchmark script:** `src/bench_multivalue.c`
@@ -151,7 +151,7 @@ All benchmarks run on:
 **Reproducibility:**
 ```bash
 make
-gcc -o bench_multivalue src/bench_multivalue.c -I./include -L./lib -lqmap -lxxhash -lqsys
+gcc -o bench_multivalue src/bench_multivalue.c -I./include -L./lib -lcorm -lxxhash -lqsys
 LD_LIBRARY_PATH=./lib ./bench_multivalue
 ```
 
@@ -159,15 +159,15 @@ LD_LIBRARY_PATH=./lib ./bench_multivalue
 
 ## Next Steps (Future Work)
 
-1. **P2.3** (Cancelled): Consolidate _qmap_put duplicate logic
+1. **P2.3** (Cancelled): Consolidate _corm_put duplicate logic
    - Medium complexity, medium benefit
    - Could save ~8 more lines
    - Deferred to avoid risk
 
 2. **Fix documented bugs:**
-   - Priority 1: qmap_assoc multi-key segfault
-   - Priority 2: QM_MIRROR persistence
-   - Priority 3: QM_RANGE iteration
+   - Priority 1: corm_assoc multi-key segfault
+   - Priority 2: CM_MIRROR persistence
+   - Priority 3: CM_RANGE iteration
 
 3. **Further optimizations:**
    - Batch deletion (delete N entries in one pass)
