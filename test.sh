@@ -21,6 +21,12 @@ rm *.db 2>/dev/null || true
 ./bin/test_extended
 ./bin/test_multivalue
 ./bin/test_record
+# Multi-db file persistence: write, read back in a fresh process (the loader
+# bug only shows across processes), then save-after-close. See test_persist.c.
+rm -f p.db
+./bin/test_persist w
+./bin/test_persist r
+./bin/test_persist z
 ./bin/rec_test
 ./bin/rec_axis_test
 ./bin/rec_axis_store_test
