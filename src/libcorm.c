@@ -687,7 +687,7 @@ _corm_open(uint32_t ktype, uint32_t vtype,
 }
 
 static inline void
-corm_load_file(char *filename, uint32_t dbid);
+corm_load_file(char *filename, uint32_t dbid, uint32_t hd);
 
 static inline uint32_t
 _corm_put(uint32_t hd, const void * key,
@@ -943,7 +943,7 @@ corm_open(const char *filename,
 
 file_skip:
   if (filename)
-    corm_load_file((char*) filename, head->dbid);
+    corm_load_file((char*) filename, head->dbid, hd);
 
   if (!(flags & CM_MIRROR))
     return hd;
@@ -2605,7 +2605,7 @@ _corm_load(uint32_t hd, const char *mmaped, uint32_t dbid)
   mm += sizeof(size_t);
 
   if (dbid != CM_MISS && lid != dbid)
-    return mm + size + sizeof(uint32_t) - mm_start;
+    return mm + size - sizeof(uint32_t) - sizeof(size_t) - mm_start;
 
   uint32_t amount = * (uint32_t*) mm;
   mm += sizeof(uint32_t);
@@ -2627,16 +2627,14 @@ _corm_load(uint32_t hd, const char *mmaped, uint32_t dbid)
   return mm - mm_start;
 }
 
-  static inline void
-corm_load_file(char *filename, uint32_t dbid)
+  static void
+corm_load_file(char *filename, uint32_t dbid, uint32_t hd)
 {
   corm_file_t *file = (corm_file_t *)
     corm_get(corm_files_hd, filename);
 
   struct stat sb;
   char *mm;
-  idsi_t *cur;
-  uint32_t hd;
 
   if (file->mmaped)
     goto skip_open;
@@ -2664,11 +2662,22 @@ corm_load_file(char *filename, uint32_t dbid)
   }
 
 skip_open:
-  cur = (idsi_t *) ids_iter(&file->ids);
-
   mm = file->mmaped;
-  while (ids_next(&hd, &cur))
-    mm += _corm_load(hd, mm, dbid);
+  char *const end = mm + file->size;
+
+  while (mm + sizeof(uint32_t) + sizeof(size_t) <= end) {
+    uint32_t lid = * (uint32_t *) mm;
+    size_t block = * (size_t *) (mm + sizeof(uint32_t));
+
+    if (block < sizeof(uint32_t) + sizeof(size_t)
+        || mm + block > end)
+      break;
+
+    if (lid == dbid)
+      _corm_load(hd, mm, dbid);
+
+    mm += block;
+  }
 }
 
   static size_t
@@ -2750,6 +2759,9 @@ corm_save_file(char *filename)
 
   file->size = corm_calc_file_size(&file->ids);
 
+  if (file->size == 0)
+    return;
+
   file->fd = open(filename, O_RDWR | O_CREAT,
       S_IRUSR | S_IWUSR);
 
@@ -2757,12 +2769,6 @@ corm_save_file(char *filename)
 
   CBUG(ftruncate(file->fd, (off_t) file->size) == -1,
       "ftruncate failed");
-
-  if (file->size == 0) {
-    close(file->fd);
-    file->fd = -1;
-    return;
-  }
 
   file->mmaped = (char*) mmap(NULL, file->size,
       PROT_WRITE, MAP_SHARED, file->fd, 0);
