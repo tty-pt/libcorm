@@ -338,6 +338,34 @@ const void *corm_get(uint32_t hd,
                      const void * const key);
 
 /**
+ * @brief Copy a value into a caller buffer.
+ *
+ * Copies corm_len(corm_get_vtype(hd), &lt;value&gt;) bytes out of the
+ * map into @p dst, so it works unchanged for fixed-size registered types
+ * (corm_reg, CM_U32, CM_PTR, CM_RECORD) and for the measured types
+ * (CM_STR), where corm_len() yields strlen + 1. Note that corm_type_len()
+ * is NOT a substitute: it returns 0 for every measured type, so a helper
+ * that sizes its copy with it copies nothing.
+ *
+ * The destination must be at least that large; the size is not returned
+ * and no truncation is performed. A caller that wants truncation must keep
+ * using corm_get() with strlcpy().
+ *
+ * @note A miss is a programming error, not a runtime condition: the call
+ *       CBUG()s. Callers that legitimately probe for presence use
+ *       corm_get() and test for NULL, or corm_count().
+ * @note Field access on a record-aware map ("id:field" keys) is rejected
+ *       with CBUG(): corm_get() resolves those to a pointer inside the
+ *       stored struct, whose length is the field's and not the map value
+ *       type's. Use corm_get() for field access.
+ *
+ * @see corm_get, corm_get_vtype, corm_len
+ */
+void corm_get_copy(uint32_t hd,
+                   const void * const key,
+                   void *dst);
+
+/**
  * @brief Insert or update a pair.
  *
  * Behavior depends on the CM_MULTIVALUE flag:
@@ -380,6 +408,36 @@ void corm_del(uint32_t hd,
  * @see corm_get_multi
  */
 void corm_del_all(uint32_t hd, const void * const key);
+
+/**
+ * @brief Delete the first entry with this key whose value matches.
+ *
+ * For CM_MULTIVALUE maps this removes exactly one duplicate entry: the
+ * first one, in insertion order, whose value equals @p value. Values are
+ * compared with the value type's own comparator (see corm_cmp_set), so
+ * CM_STR matches by content rather than by pointer identity. This is the
+ * per-(key, value) delete that corm_del() — which drops the first entry
+ * with this key whatever its value — and corm_del_all() — which drops all
+ * of them — cannot express.
+ *
+ * For maps without CM_MULTIVALUE there is only ever one value per key and
+ * it is not separately addressable, so @p value is ignored and this
+ * behaves exactly like corm_del().
+ *
+ * Iteration STOPS at the first match: the entry is unlinked from its
+ * duplicate chain and freed before returning, so the cursor is never
+ * advanced again.
+ *
+ * @param[in] hd    Map handle.
+ * @param[in] key   Key to look up.
+ * @param[in] value Value to match against each duplicate.
+ * @return          1 if an entry was deleted, 0 if none matched.
+ *
+ * @see corm_del, corm_del_all, corm_get_multi, corm_count
+ */
+int corm_del_value(uint32_t hd,
+                   const void * const key,
+                   const void * const value);
 
 /**
  * @brief Remove all entries from a map.
@@ -565,6 +623,34 @@ uint32_t corm_iter(uint32_t hd,
 int corm_next(const void **key,
               const void **value,
               uint32_t cur_id);
+
+/**
+ * @brief Fetch next key/value, copied into caller buffers.
+ *
+ * As corm_next(), except the key and the value are memcpy'd out using the
+ * cursor's own map's type lengths, so a call site needs no casts and no
+ * const void * temporaries. Lengths come from corm_len(), so measured
+ * types (CM_STR) are copied in full; corm_type_len() would return 0 for
+ * those and copy nothing.
+ *
+ * Each destination must be at least corm_len() bytes for the side it
+ * receives; the size is not returned and no truncation is performed. NULL
+ * skips that side.
+ *
+ * As with corm_next(), the cursor is released by corm at
+ * end-of-iteration, and a corm_fin() after the loop that returned 0 is a
+ * no-op.
+ *
+ * @param[out] key    Destination for the key, or NULL to skip it.
+ * @param[out] value  Destination for the value, or NULL to skip it.
+ * @param[in]  cur_id Cursor handle from corm_iter() or corm_get_multi().
+ * @return            1 if valid, 0 if done.
+ *
+ * @see corm_next, corm_iter, corm_get_multi, corm_len
+ */
+int corm_next_copy(void *key,
+                   void *value,
+                   uint32_t cur_id);
 
 /**
  * @brief End iteration early.
