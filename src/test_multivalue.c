@@ -1421,6 +1421,150 @@ static void test_chain_order_grow_with_holes(void)
 	corm_close(hd);
 }
 
+
+/* Test: corm_del_value — delete one duplicate by value, not by key */
+static void test_del_value_u32(void)
+{
+	uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_U32, 0xFF,
+	                        CM_MULTIVALUE | CM_SORTED);
+	uint32_t key = 42;
+
+	corm_put(hd, &key, &(uint32_t){1});
+	corm_put(hd, &key, &(uint32_t){2});
+	corm_put(hd, &key, &(uint32_t){3});
+	assert(corm_count(hd, &key) == 3);
+
+	/* Remove the middle duplicate: the other two survive, in order */
+	assert(corm_del_value(hd, &key, &(uint32_t){2}) == 1);
+	assert(corm_count(hd, &key) == 2);
+
+	uint32_t seen[4], n = 0;
+	uint32_t cur = corm_get_multi(hd, &key);
+	const void *k, *v;
+	while (corm_next(&k, &v, cur))
+		seen[n++] = *(const uint32_t *)v;
+	corm_fin(cur);
+	assert(n == 2 && seen[0] == 1 && seen[1] == 3);
+
+	/* A value that is not in the set changes nothing */
+	assert(corm_del_value(hd, &key, &(uint32_t){99}) == 0);
+	assert(corm_count(hd, &key) == 2);
+
+	/* Drain the rest, one at a time, then report an empty match */
+	assert(corm_del_value(hd, &key, &(uint32_t){1}) == 1);
+	assert(corm_del_value(hd, &key, &(uint32_t){3}) == 1);
+	assert(corm_count(hd, &key) == 0);
+	assert(corm_del_value(hd, &key, &(uint32_t){3}) == 0);
+
+	/* A key that was never put */
+	assert(corm_del_value(hd, &(uint32_t){12345}, &(uint32_t){1}) == 0);
+
+	corm_close(hd);
+}
+
+/* Only the matching duplicate goes: other keys and other values survive */
+static void test_del_value_isolated(void)
+{
+	uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_U32, 0xFF,
+	                        CM_MULTIVALUE | CM_SORTED);
+	uint32_t k1 = 1, k2 = 2;
+
+	corm_put(hd, &k1, &(uint32_t){10});
+	corm_put(hd, &k1, &(uint32_t){20});
+	corm_put(hd, &k2, &(uint32_t){20});
+
+	assert(corm_del_value(hd, &k1, &(uint32_t){20}) == 1);
+	assert(corm_count(hd, &k1) == 1);
+	assert(corm_count(hd, &k2) == 1);
+
+	/* The same value under a different key is a different entry */
+	uint32_t got = 0;
+	corm_get_copy(hd, &k1, &got);
+	assert(got == 10);
+	corm_get_copy(hd, &k2, &got);
+	assert(got == 20);
+
+	corm_close(hd);
+}
+
+/* CM_STR values match by content, not by pointer identity: the query
+ * buffer below is a different object with the same bytes. */
+static void test_del_value_str(void)
+{
+	uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_STR, 0xFF,
+	                        CM_MULTIVALUE | CM_SORTED);
+	uint32_t key = 7;
+
+	char a[] = "hello";
+	char b[] = "hello";   /* same content, different address than a */
+	char c[] = "world";
+	assert((const void *)a != (const void *)b);
+
+	corm_put(hd, &key, a);
+	corm_put(hd, &key, b);
+	corm_put(hd, &key, c);
+	assert(corm_count(hd, &key) == 3);
+
+	/* Pass b: the stored copies are interior to the map, so only a
+	 * content comparison can match. */
+	assert(corm_del_value(hd, &key, b) == 1);
+	assert(corm_count(hd, &key) == 2);
+
+	char got[16];
+	memset(got, 0, sizeof(got));
+	corm_get_copy(hd, &key, got);
+	assert(strcmp(got, "hello") == 0);
+
+	/* Drain the chain with repeated calls, as a caller must */
+	assert(corm_del_value(hd, &key, a) == 1);
+	assert(corm_count(hd, &key) == 1);
+	assert(corm_del_value(hd, &key, c) == 1);
+	assert(corm_count(hd, &key) == 0);
+
+	corm_close(hd);
+}
+
+/* One value per key: corm_del() semantics, with an honest return value */
+static void test_del_value_non_multivalue(void)
+{
+	uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_STR, 0xFF, 0);
+	uint32_t key = 1;
+
+	corm_put(hd, &key, "value");
+
+	/* The value is not separately addressable, so it is ignored — but
+	 * the return still says whether an entry went away. */
+	assert(corm_del_value(hd, &key, "anything at all") == 1);
+	assert(corm_get(hd, &key) == NULL);
+	assert(corm_del_value(hd, &key, "value") == 0);
+
+	corm_close(hd);
+}
+
+/* corm_get_copy on a measured value: the corm_type_len() trap, where a
+ * copy sized with the nominal type length would copy zero bytes. */
+static void test_get_copy_measured(void)
+{
+	uint32_t hd = corm_open(NULL, NULL, CM_U32, CM_STR, 0xFF, 0);
+	uint32_t key = 1;
+
+	corm_put(hd, &key, "a string well past eight bytes");
+
+	char buf[64];
+	memset(buf, 0xA5, sizeof(buf));
+	corm_get_copy(hd, &key, buf);
+	assert(strcmp(buf, "a string well past eight bytes") == 0);
+
+	/* Exactly strlen + 1 bytes: the sentinel past the NUL is untouched */
+	assert(buf[strlen("a string well past eight bytes") + 1] == (char)0xA5);
+
+	/* This is the assertion that fails against a corm_type_len() copy */
+	assert(corm_type_len(CM_STR) == 0);
+	assert(corm_len(CM_STR, buf) == strlen(buf) + 1);
+
+	corm_close(hd);
+}
+
 int main(void)
 {
 	printf("=== CM_MULTIVALUE Test Suite ===\n\n");
@@ -1452,6 +1596,11 @@ int main(void)
 	TEST(test_backshift_wrap);
 	TEST(test_chain_order_slot_reuse);
 	TEST(test_chain_order_grow_with_holes);
+	TEST(test_del_value_u32);
+	TEST(test_del_value_isolated);
+	TEST(test_del_value_str);
+	TEST(test_del_value_non_multivalue);
+	TEST(test_get_copy_measured);
 	
 	printf("\n=== All tests passed! ===\n");
 	return 0;

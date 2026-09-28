@@ -1668,6 +1668,26 @@ corm_get(uint32_t hd, const void * const key)
   return corm_val(hd, n);
 }
 
+  void /* API */
+corm_get_copy(uint32_t hd, const void * const key, void *dst)
+{
+  corm_head_t *head = &corm_heads[hd];
+  const void *v;
+
+  /* corm_get() resolves a record-aware "id:field" key to a pointer into
+   * the middle of the stored struct. The map's value type is the whole
+   * struct, so sizing the copy from it would overrun both the field and
+   * the caller's buffer. corm_get() is the only correct spelling there. */
+  CBUG(head->record_id > 0 && key
+      && strchr((const char *) key, ':') != NULL,
+      "corm_get_copy: field access on a record map, use corm_get()\n");
+
+  v = corm_get(hd, key);
+  CBUG(!v, "corm_get_copy: no record in hd %u\n", hd);
+
+  memcpy(dst, v, corm_len(corm_get_vtype(hd), v));
+}
+
 /* }}} */
 
 /* DELETE {{{ */
@@ -1962,19 +1982,91 @@ corm_del_all(uint32_t hd, const void * const key)
   }
 }
 
+/* Delete the first duplicate of `key` whose value equals `value`. The
+ * replacement for the read-scan-del_all-reput dance this used to force on
+ * callers: that shape had to malloc a keep-set, silently no-op when the
+ * malloc failed, and rewrite every surviving duplicate (losing write
+ * coalescing) to remove one. Here the duplicate chain is walked in place
+ * and the matching slot is unlinked by corm_ndel(). */
+  int /* API */
+corm_del_value(uint32_t hd, const void * const key,
+    const void * const value)
+{
+  corm_head_t *head = &corm_heads[hd];
+  corm_cmp_t *cmp;
+  size_t vlen;
+  uint32_t cur, sn;
+
+  /* One value per key, and it is not addressable separately from the key,
+   * so there is nothing to match on: this is corm_del(). Report honestly
+   * whether anything was there, rather than always 0. */
+  if (!(head->flags & CM_MULTIVALUE)) {
+    if (!corm_get(hd, key))
+      return 0;
+    corm_del(hd, key);
+    return 1;
+  }
+
+  cur = corm_get_multi(hd, key);
+  if (cur == CM_MISS)
+    return 0;
+
+  cmp = corm_types[corm_get_vtype(hd)].cmp;
+  vlen = corm_len(corm_get_vtype(hd), value);
+
+  while (corm_lnext(&sn, cur)) {
+    const void *sv = corm_val(hd, sn);
+    size_t slen = corm_len(corm_get_vtype(hd), sv);
+
+    /* Compare over the shorter of the two: a measured type's default
+     * comparator is corm_ccmp (memcmp), and either operand may be the
+     * shorter one. corm_scmp/corm_ucmp ignore the length entirely. */
+    if (cmp(sv, value, slen < vlen ? slen : vlen) == 0) {
+      if (head->record_id > 0 && head->inv_hds)
+        clean_inverses_for_pos(head, sn);
+      corm_ndel(hd, sn);
+      corm_fin(cur);
+      return 1;
+    }
+  }
+
+  corm_fin(cur);
+  return 0;
+}
+
 /* }}} */
 
 /* ITERATION {{{ */
 
-  void /* API */
-corm_fin(uint32_t cur_id)
+/* Release a cursor's id back to the cursor id manager. Idempotent: the
+ * end-of-iteration path in corm_lnext() releases the id itself, and a
+ * corm_fin() after a loop that returned 0 is the documented way to write
+ * a scan. idm_del() is NOT idempotent — a second call re-pushes the same
+ * id onto the free list, so two later corm_iter() calls would be handed
+ * one cursor slot and clobber each other. The hd = CM_MISS tombstone is
+ * what makes the second release a no-op, and it also stops a stale cursor
+ * id from resuming a slot that has since been recycled to another map.
+ */
+  static inline void
+corm_cur_release(uint32_t cur_id)
 {
   corm_cur_t *cursor = &corm_cursors[cur_id];
+
+  if (cursor->hd == CM_MISS)
+    return;
 
   if (cursor->sub_cur)
     corm_fin(cursor->sub_cur);
 
+  cursor->sub_cur = 0;
+  cursor->hd = CM_MISS;
   idm_del(&cursor_idm, cur_id);
+}
+
+  void /* API */
+corm_fin(uint32_t cur_id)
+{
+  corm_cur_release(cur_id);
 }
 
   uint32_t /* API */
@@ -2046,10 +2138,18 @@ corm_lnext(uint32_t *sn, uint32_t cur_id)
 {
   register corm_cur_t *cursor
     = &corm_cursors[cur_id];
-  register corm_head_t *head = &corm_heads[cursor->hd];
-  register corm_t *corm = &corms[cursor->hd];
+  register corm_head_t *head;
+  register corm_t *corm;
   uint32_t n;
   const void *key;
+
+  /* A released cursor is a tombstone, not a position: corm->idm.last has
+   * moved on and the slot may already belong to another map. */
+  if (cursor->hd == CM_MISS)
+    goto end;
+
+  head = &corm_heads[cursor->hd];
+  corm = &corms[cursor->hd];
 
   if (cursor->flags & CM_MVCHAIN) {
     /* Duplicate-chain walk (corm_get_multi): yield the current position
@@ -2131,7 +2231,7 @@ next:
   *sn = n;
   return 1;
 end:
-  idm_del(&cursor_idm, cur_id);
+  corm_cur_release(cur_id);
   *sn = CM_MISS;
   return 0;
 }
@@ -2152,6 +2252,27 @@ corm_next(const void ** ckey, const void ** cval,
     *ckey = corm_key(c->hd, sn);
   if (cval)
     *cval = corm_val(c->hd, sn);
+  return 1;
+}
+
+/* corm_next() for callers that want the bytes, not the map-owned pointer.
+ * The cursor's hd is read BEFORE corm_next() because corm_next()'s
+ * end-of-iteration path releases the cursor id, and the id — not the
+ * corm_cursors[] slot — is what carries the map handle for the length
+ * lookup that follows. */
+  int /* API */
+corm_next_copy(void *key, void *value, uint32_t cur_id)
+{
+  const void *ck, *cv;
+  corm_cur_t *c = &corm_cursors[cur_id];
+  uint32_t hd = c->hd;
+
+  if (!corm_next(&ck, &cv, cur_id))
+    return 0;
+  if (key)
+    memcpy(key, ck, corm_len(corm_get_ktype(hd), ck));
+  if (value)
+    memcpy(value, cv, corm_len(corm_get_vtype(hd), cv));
   return 1;
 }
 

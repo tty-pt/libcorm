@@ -10,12 +10,17 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <signal.h>
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 
 #define TEST_MASK 0xF  // Small capacity for testing limits
 
 unsigned errors = 0;
 
 #define PASS() printf("  ✅ PASS\n")
+#define SKIP(msg) printf("  ⏭️  SKIP: %s\n", msg)
 #define FAIL(msg) do { printf("  ❌ FAIL: %s\n", msg); errors++; } while(0)
 #define ASSERT(cond, msg) do { if (!(cond)) FAIL(msg); else PASS(); } while(0)
 
@@ -631,7 +636,9 @@ static void test_update_keys(void) {
 static void test_file_loading_no_mirror(void) {
 	printf("\n=== Test 14: File Loading Without CM_MIRROR ===\n");
 	
-	const char *testfile = "/tmp/corm_test_no_mirror.db";
+	/* Relative like the other file tests in here, and like the `rm *.db` in
+	 * test.sh: an absolute /tmp path is not usable on Windows. */
+	const char *testfile = "corm_test_no_mirror.db";
 	
 	// Create and populate a file-backed map with CM_MIRROR
 	printf("Creating file with CM_MIRROR:");
@@ -713,6 +720,87 @@ static void test_pointer_stability(void) {
 }
 
 /* Test 16: File reopen and append (CLI pattern) */
+
+
+static void test_corm_get_copy(void)
+{
+	printf("\n=== Test 15: corm_get_copy ===\n");
+
+	uint32_t hd = corm_open(NULL, NULL, CM_STR, CM_STR, 0xFF, 0);
+	corm_put(hd, "key1", "value1");
+
+	printf("corm_get_copy hit:");
+	char dst[32];
+	memset(dst, 0x7F, sizeof(dst));
+	corm_get_copy(hd, "key1", dst);
+	ASSERT(strcmp(dst, "value1") == 0, "copied full string");
+	ASSERT(dst[6] == '\0', "NUL terminator present");
+
+	printf("corm_get_copy miss aborts (child test):");
+#ifndef _WIN32
+	pid_t pid = fork();
+	if (pid == 0) {
+		char dd[8];
+		corm_get_copy(hd, "missing", dd);
+		exit(2); /* should not reach */
+	} else {
+		int status = 0;
+		waitpid(pid, &status, 0);
+		if (WIFSIGNALED(status) || WIFEXITED(status)) {
+			int exited = WIFEXITED(status) ? WEXITSTATUS(status) : 127;
+			int signaled = WIFSIGNALED(status) ? WTERMSIG(status) : 0;
+			ASSERT(signaled == SIGABRT || exited != 0, "miss must abort");
+		} else {
+			FAIL("unexpected status");
+		}
+	}
+#else /* _WIN32: no fork() */
+	/* The abort is observed as a signal/exit status in a child, and mingw
+	 * has neither fork() nor sys/wait.h, so there is no child to raise it
+	 * in. The Windows packaging job only compiles this binary (run_tests
+	 * is off in ci.yml), so the check is skipped rather than traded for a
+	 * different mechanism. */
+	SKIP("fork() is POSIX-only");
+#endif
+	corm_close(hd);
+}
+
+static void test_corm_next_copy(void)
+{
+	printf("\n=== Test 16: corm_next_copy ===\n");
+
+	uint32_t hd = corm_open(NULL, NULL, CM_STR, CM_STR, 0xF, 0);
+	corm_put(hd, "a", "A");
+	corm_put(hd, "b", "B");
+
+	printf("next_copy copies keys/values:");
+	char k[8], v[8];
+	uint32_t cur = corm_iter(hd, NULL, 0);
+	int got = 0;
+	while (corm_next_copy(k, v, cur)) {
+		got++;
+		ASSERT((strcmp(k, "a") == 0 && strcmp(v, "A") == 0) ||
+		       (strcmp(k, "b") == 0 && strcmp(v, "B") == 0), "correct pair");
+	}
+	ASSERT(got == 2, "two entries");
+	corm_close(hd);
+
+	printf("next_copy can skip sides:");
+	hd = corm_open(NULL, NULL, CM_U32, CM_U32, 0xF, 0);
+	uint32_t kk = 1, vv = 9;
+	corm_put(hd, &kk, &vv);
+	cur = corm_iter(hd, NULL, 0);
+	unsigned kout = 0, vout = 0;
+	while (corm_next_copy(&kout, NULL, cur)) {
+		ASSERT(kout == 1, "key copied");
+	}
+	cur = corm_iter(hd, NULL, 0);
+	while (corm_next_copy(NULL, &vout, cur)) {
+		ASSERT(vout == 9, "val copied");
+	}
+	corm_close(hd);
+}
+
 static void test_file_reopen_append(void) {
 	printf("\n=== Test 16: File Reopen and Append (CLI Pattern) ===\n");
 	
@@ -830,6 +918,8 @@ int main(void) {
 	test_update_keys();
 	test_file_loading_no_mirror();
 	test_pointer_stability();
+	test_corm_get_copy();
+	test_corm_next_copy();
 	test_file_reopen_append();
 	
 	printf("\n╔════════════════════════════════════════════════════════════╗\n");
