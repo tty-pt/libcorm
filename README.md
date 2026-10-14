@@ -1,10 +1,15 @@
+<p align="center">
+  <img src="assets/logo.png" alt="libcorm logo" width="220" />
+</p>
+
 # libcorm
 
 [![C99](https://img.shields.io/badge/C-C99-555?logo=c)](#)
 [![BSD-2-Clause](https://img.shields.io/badge/License-BSD--2--Clause-blue)](#)
-[![In-memory maps](https://img.shields.io/badge/in-memory-maps-16A34A)](#)
+[![In-memory maps](https://img.shields.io/badge/in--memory-maps-16A34A)](#)
+[![Recall Kernel](https://img.shields.io/badge/engine-recall--kernel-blueviolet)](#)
 
-> A small library for in-memory maps with optional persistence and a CLI tool.
+> High-performance in-memory maps with optional disk persistence, secondary associations, record-aware field resolution, and the unified recall kernel (`rec.h`).
 
 Hash maps with typed keys/values, registration of custom types, secondary
 indexes (associations), record-aware field access, free-list ID management,
