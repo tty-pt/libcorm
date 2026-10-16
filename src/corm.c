@@ -117,6 +117,12 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <sys/stat.h>
+#include <sys/file.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/time.h>
+#include <limits.h>
+#include <errno.h>
 #include <ttypt/qsys.h>
 #include <ttypt/rec.h>
 
@@ -125,7 +131,7 @@
 	if (DEBUG_LVL > lvl) WARN(__VA_ARGS__)
 
 #define CM_MAX 1024
-#define QDBE_MASK (4096 - 1)   /* 4k buckets: only an initial hint —
+#define QDBE_MASK (256 - 1)    /* 256 buckets default: small initial footprint —
 				* corm_open auto-grows on overflow (D11) */
 #define QDBE_QMASK 0xF
 /* CLI-specific flags - use high bits to avoid overlap with QM library flags (0x1F) */
@@ -387,6 +393,224 @@ void corme_print(uint32_t hd, enum corme_mbr t,
 	corme_meta_t *meta = &metas[hd];
 	corme_type_t *type = &types[meta->types[t]];
 	type->print(buf);
+}
+
+static int g_standalone_lock_fd = -1;
+
+static int
+cormd_check_lease(const char *cpath, char *out_sock, size_t sock_len)
+{
+	if (g_standalone_lock_fd >= 0)
+		return 0; /* This process already holds the standalone lock */
+	if (!cpath || !*cpath)
+		return 0;
+	char lock_path[BUFSIZ];
+	char dirbuf[BUFSIZ];
+	snprintf(dirbuf, sizeof(dirbuf), "%s", cpath);
+	snprintf(lock_path, sizeof(lock_path), "%s/.cormd.lock", dirname(dirbuf));
+
+	/* Open lock file with O_RDWR | O_CREAT (avoids Linux O_RDONLY flock limitation) */
+	int fd = open(lock_path, O_RDWR | O_CREAT, 0644);
+	if (fd < 0) {
+		if (errno == ENOENT)
+			return 0;
+		/* Unexpected open error: fail closed */
+		return -1;
+	}
+
+	struct timespec start_ts;
+	clock_gettime(CLOCK_MONOTONIC, &start_ts);
+
+	while (1) {
+		if (flock(fd, LOCK_EX | LOCK_NB) == 0) {
+			/* Exclusive lock acquired! Standalone CLI mode */
+			if (ftruncate(fd, 0) == 0) {
+				dprintf(fd, "{\"pid\":%d,\"owner\":\"cli\"}\n", (int)getpid());
+			}
+			g_standalone_lock_fd = fd;
+			return 0;
+		}
+
+		if (errno != EWOULDBLOCK && errno != EAGAIN) {
+			close(fd);
+			return -1; /* Unexpected flock error: fail closed */
+		}
+
+		/* Lock is held by someone. Inspect metadata to distinguish daemon from CLI */
+		char lbuf[1024] = {0};
+		lseek(fd, 0, SEEK_SET);
+		ssize_t nr = read(fd, lbuf, sizeof(lbuf) - 1);
+		if (nr > 0) {
+			lbuf[nr] = '\0';
+			if (strstr(lbuf, "\"owner\":\"daemon\"")) {
+				/* Lease held by active daemon! Read socket path from .cormd.lock */
+				if (out_sock && sock_len > 0) {
+					out_sock[0] = '\0';
+					char *sp = strstr(lbuf, "\"socket\":\"");
+					if (sp) {
+						sp += 10;
+						char *end = strchr(sp, '"');
+						if (end) {
+							size_t slen = (size_t)(end - sp);
+							if (slen < sock_len) {
+								memcpy(out_sock, sp, slen);
+								out_sock[slen] = '\0';
+							}
+						}
+					}
+				}
+				close(fd);
+				return 1; /* Daemon lease is active */
+			}
+		}
+
+		/* Held by standalone CLI (or in-transition daemon startup).
+		 * Check elapsed time against bounded timeout policy (3000ms). */
+		struct timespec cur_ts;
+		clock_gettime(CLOCK_MONOTONIC, &cur_ts);
+		long elapsed_ms = (cur_ts.tv_sec - start_ts.tv_sec) * 1000 +
+		                  (cur_ts.tv_nsec - start_ts.tv_nsec) / 1000000;
+		if (elapsed_ms >= 3000) {
+			fprintf(stderr, "corm: database locked by concurrent standalone writer (timeout after 3000ms)\n");
+			close(fd);
+			return -1;
+		}
+
+		/* Sleep 25ms and retry */
+		struct timespec req = { .tv_sec = 0, .tv_nsec = 25000000 };
+		nanosleep(&req, NULL);
+	}
+}
+
+static int
+cormd_forward_mutation(const char *op, const char *target_db, const char *arg, const char *body)
+{
+	char sock_path[BUFSIZ] = {0};
+	int lease_status = cormd_check_lease(corm_path, sock_path, sizeof(sock_path));
+	if (lease_status < 0) {
+		fprintf(stderr, "corm: lock error verifying database lease; mutation aborted\n");
+		return EXIT_FAILURE;
+	}
+	if (lease_status == 0) {
+		/* Standalone mode: g_standalone_lock_fd holds the lease */
+		return -1;
+	}
+
+	/* Daemon is active: discover socket if not parsed from lock */
+	if (!sock_path[0]) {
+		const char *env_sock = getenv("CORMD_SOCKET");
+		if (!env_sock) env_sock = getenv("PI_MM_SOCKET");
+		if (env_sock && *env_sock) {
+			snprintf(sock_path, sizeof(sock_path), "%s", env_sock);
+		} else {
+			char dirbuf[BUFSIZ];
+			snprintf(dirbuf, sizeof(dirbuf), "%s", corm_path);
+			snprintf(sock_path, sizeof(sock_path), "%s/cormd.sock", dirname(dirbuf));
+		}
+	}
+
+	int sfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sfd < 0) {
+		fprintf(stderr, "corm: socket creation failed: %s\n", strerror(errno));
+		return EXIT_FAILURE;
+	}
+
+	struct sockaddr_un addr;
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, sock_path, sizeof(addr.sun_path) - 1);
+
+	/* Set socket timeouts (3s) */
+	struct timeval tv;
+	tv.tv_sec = 3;
+	tv.tv_usec = 0;
+	setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+	setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+	if (connect(sfd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+		fprintf(stderr, "corm: database is leased by resident cormd, but daemon is unreachable; direct mutation refused\n");
+		close(sfd);
+		return EXIT_FAILURE;
+	}
+
+	size_t body_len = body ? strlen(body) : 0;
+	char hdr[BUFSIZ * 2];
+	snprintf(hdr, sizeof(hdr), "%s cli_%d %s %s %zu\n",
+			op, (int)getpid(), target_db ? target_db : corm_path, arg ? arg : "0", body_len);
+
+	/* Send header and body */
+	if (write(sfd, hdr, strlen(hdr)) != (ssize_t)strlen(hdr)) {
+		fprintf(stderr, "corm: failed sending mutation to daemon: %s\n", strerror(errno));
+		close(sfd);
+		return EXIT_FAILURE;
+	}
+	if (body_len > 0) {
+		if (write(sfd, body, body_len) != (ssize_t)body_len) {
+			/* Ambiguous outcome: data partially written */
+			fprintf(stderr, "corm: mutation outcome ambiguous: connection dropped mid-request; replay refused\n");
+			close(sfd);
+			return EXIT_FAILURE;
+		}
+	}
+
+	/* Read response header */
+	char res_hdr[BUFSIZ] = {0};
+	size_t hpos = 0;
+	while (hpos < sizeof(res_hdr) - 1) {
+		char c;
+		ssize_t n = read(sfd, &c, 1);
+		if (n <= 0) {
+			fprintf(stderr, "corm: mutation outcome ambiguous: connection closed after sending request; replay refused\n");
+			close(sfd);
+			return EXIT_FAILURE;
+		}
+		res_hdr[hpos++] = c;
+		if (c == '\n') break;
+	}
+	res_hdr[hpos] = '\0';
+
+	char status[16] = {0};
+	char req_id[64] = {0};
+	size_t res_body_len = 0;
+	sscanf(res_hdr, "%15s %63s %zu", status, req_id, &res_body_len);
+
+	/* Read response body */
+	char *res_body = NULL;
+	if (res_body_len > 0) {
+		res_body = malloc(res_body_len + 1);
+		if (!res_body) {
+			close(sfd);
+			return EXIT_FAILURE;
+		}
+		size_t bpos = 0;
+		while (bpos < res_body_len) {
+			ssize_t n = read(sfd, res_body + bpos, res_body_len - bpos);
+			if (n <= 0) {
+				fprintf(stderr, "corm: error reading mutation response body: %s\n", strerror(errno));
+				free(res_body);
+				close(sfd);
+				return EXIT_FAILURE;
+			}
+			bpos += n;
+		}
+		res_body[res_body_len] = '\0';
+	}
+	close(sfd);
+
+	if (!strcmp(status, "OK")) {
+		if (res_body && res_body_len > 0) {
+			/* Ensure formatting matches standalone corme_print (appends \n) */
+			fwrite(res_body, 1, res_body_len, stdout);
+			if (res_body[res_body_len - 1] != '\n')
+				putchar('\n');
+		}
+		free(res_body);
+		return EXIT_SUCCESS;
+	}
+
+	fprintf(stderr, "corm: %s\n", res_body ? res_body : "daemon mutation failed");
+	free(res_body);
+	return EXIT_FAILURE;
 }
 
 void
@@ -2489,9 +2713,43 @@ main(int argc, char *argv[])
 	case 'R': gen_rand(); break;
 	case 'L': gen_list_missing(); break;
 	case 'l': gen_list(); break;
-	case 'p': rc |= gen_put(); break;
-	case 'd': rc |= gen_del(); break;
-	case 'D': rc |= gen_del_all(); break;
+	case 'p': {
+		char optarg_copy[BUFSIZ];
+		snprintf(optarg_copy, sizeof(optarg_copy), "%s", optarg);
+		char *ref_arg = "0";
+		char *val_arg = optarg;
+		char *first_col = strchr(optarg_copy, ':');
+		if (first_col) {
+			*first_col = '\0';
+			ref_arg = optarg_copy;
+			val_arg = optarg + (first_col - optarg_copy) + 1;
+		}
+		int frc = cormd_forward_mutation("PUT", corm_path, ref_arg, val_arg);
+		if (frc >= 0) {
+			rc |= frc;
+			break;
+		}
+		rc |= gen_put();
+		break;
+	}
+	case 'd': {
+		int frc = cormd_forward_mutation("DEL", corm_path, optarg, NULL);
+		if (frc >= 0) {
+			rc |= frc;
+			break;
+		}
+		rc |= gen_del();
+		break;
+	}
+	case 'D': {
+		int frc = cormd_forward_mutation("DEL_ALL", corm_path, optarg ? optarg : "all", NULL);
+		if (frc >= 0) {
+			rc |= frc;
+			break;
+		}
+		rc |= gen_del_all();
+		break;
+	}
 	case 'g':
 		if (!strcmp(optarg, ".") && expr_root) {
 			rc = corm_composed_get();
@@ -2510,5 +2768,11 @@ main(int argc, char *argv[])
 	 * ops when no explicit -g . already ran it at argv position. */
 	if (expr_root && !query_ran)
 		rc |= corm_composed_get();
+	if (g_standalone_lock_fd >= 0) {
+		ftruncate(g_standalone_lock_fd, 0);
+		flock(g_standalone_lock_fd, LOCK_UN);
+		close(g_standalone_lock_fd);
+		g_standalone_lock_fd = -1;
+	}
 	return rc;
 }
