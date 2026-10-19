@@ -3,7 +3,7 @@
  * produces exactly the results a hand-composed fill/join/rank loop
  * produces, and that it is not meaningfully slower. */
 
-#include "./../include/ttypt/rec.h"
+#include "./../include/ttypt/corm.h"
 
 #include <stdio.h>
 #include <stdlib.h>

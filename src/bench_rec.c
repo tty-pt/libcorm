@@ -3,7 +3,6 @@
  * corm join (iterate A, corm_get membership in B). Asserts identical match
  * counts and records wall time for both paths. */
 
-#include "./../include/ttypt/rec.h"
 #include "./../include/ttypt/corm.h"
 
 #include <stdio.h>

@@ -1,7 +1,7 @@
-# The Recall Kernel — `rec.h`
+# The Recall Kernel — `cormr.h`
 
 A domain-free **"filter by axis → join → rank"** loop over uniform 32-bit
-corm refs. The kernel lives in this library (`include/ttypt/rec.h`,
+corm refs. The kernel lives in this library (`include/ttypt/cormr.h`,
 `src/rec.c`). It knows nothing about time, space, text, or meaning: it
 collects refs, combines candidate sets, and keeps the best-ranked results.
 Axis libraries stay independent domain stores and feed the kernel through
@@ -136,7 +136,7 @@ int rec_axis_fill_*(<domain query args>, rec_set_t *out);
 Rules (the contract):
 
 1. **Signature** — returns plain `int` (0 ok / −1 error), consistent with
-   `rec.h`'s `int`-return convention. No bespoke result enums.
+   `cormr.h`'s `int`-return convention. No bespoke result enums.
 2. **Streams, does not materialize.** The adapter pushes refs as it walks;
    it never builds an intermediate result array (e.g. a full box-volume).
    Sparse queries over huge domains stay cheap.
@@ -164,7 +164,7 @@ Most fills are **exact**: every matching ref is reported, so intersecting
 with anything keeps exact results. Approximate axes (e.g. ANN/HNSW semantic
 neighbors) report a bounded candidate window `m` and cannot promise full
 recall. An approximate fill must **declare itself** (a flag on the set plus
-owed recall@k — implemented: `rec.h` `rec_set_set_approx()` /
+owed recall@k — implemented: `cormr.h` `cormr_set_approx()` /
 `rec_set_approx()` / `rec_set_recall_bound()`; joins propagate: intersect/
 union → approximate when either operand is, bound = min; subtract keeps the
 left operand's flag), because intersecting with an approximate set bounds
@@ -267,7 +267,7 @@ int rec_axis_readback(void *ctx, rec_ref_t ref, char **blob_out, size_t *n_out);
 
 > **Name note (locked 2026-09-14, U2):** the read-back symbol is
 > `rec_axis_readback`, *not* `rec_axis_get` — `rec_axis_get(int slot)` is
-> the kernel registry lookup (`rec.h`), already landed and used by corm.c /
+> the kernel registry lookup (`cormr.h`), already landed and used by corm.c /
 > the axis suites, so the plugin read-back must not collide with it.
 
 **Axis autonomy (the governing principle):** the consumer passes `(ref,
@@ -332,7 +332,7 @@ whole-sentence or runtime values that do not belong in the `-X` expression
 structure or the roster. An axis **may** additionally export:
 
 ```c
-/* kernel-owned ABI — ttypt/rec.h, visible to every TU, never re-declared */
+/* kernel-owned ABI — ttypt/cormr.h, visible to every TU, never re-declared */
 struct rec_axis_cli_option { const char *name; int has_arg; const char *help; };
 const struct rec_axis_cli_option *rec_axis_cli_options(void);
 int rec_axis_config_arg(const char *name, const char *value);
@@ -340,7 +340,7 @@ int rec_axis_config_arg(const char *name, const char *value);
 
 (`struct option`-shaped. The decode-spec grammar an axis parses —
 space-separated `key=value` with single-quoted values — is likewise owned
-once by the kernel: `ttypt/rec.h rec_spec_scan` (read-only, zero-alloc,
+once by the kernel: `ttypt/cormr.h cormr_spec_scan` (read-only, zero-alloc,
 values returned as length-delimited ranges; pair with `rec_cli_*_b`). An
 axis implements only its option table plus its per-field mapping in `rec_axis_config_arg` /
 decode, routing string/numeric values through the shared
@@ -488,7 +488,7 @@ and headers returns zero matches.
 
 ## Status
 
-- Kernel (`rec.h`/`rec.c` + `rec_test`, `bench_rec`): landed in this repo,
+- Kernel (`cormr.h`/`rec.c` + `rec_test`, `bench_rec`): landed in this repo,
   branch `kernel`.
 - libislet adapter `rec_axis_fill_bbox`: implemented (libislet branch
   `kernel`).

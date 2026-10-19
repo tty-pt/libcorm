@@ -27,7 +27,7 @@
  *     stored entry display string (absent → NULL/0, still 0).
  *
  * CORM_AXIS_LIBS loads it; -X expr names pull axes by name. */
-#include <ttypt/rec.h>
+#include <ttypt/corm.h>
 #include <ttypt/corm.h>
 #include <errno.h>
 #include <stdint.h>
@@ -181,7 +181,7 @@ rec_axis_readback(void *ctx, rec_ref_t ref, char **blob_out, size_t *n_out)
 /* ── D14 CLI-option convention: declared surface + per-option delivery.
  *    Same optional dlsym pattern as rec_axis_env_config — the corm CLI is
  *    axis-agnostic and never declares/calls these itself. The option
- *    struct ABI is kernel-owned in <ttypt/rec.h>. ── */
+ *    struct ABI is kernel-owned in <ttypt/cormr.h>. ── */
 
 const struct rec_axis_cli_option *
 rec_axis_cli_options(void)

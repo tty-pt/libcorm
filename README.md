@@ -15,7 +15,7 @@
 
 ## Recall Kernel Composition
 
-`libcorm` hosts the domain-free recall kernel (`rec.h`), which composes queries across four independent domain axes:
+`libcorm` hosts the domain-free recall kernel (`cormr.h`), which composes queries across four independent domain axes:
 
 - **[libjoint](https://github.com/tty-pt/libit)** (Time Axis): Evaluates temporal presence intervals via `rec_axis_fill_interval`.
 - **[libislet](https://github.com/tty-pt/libgeo)** (Space Axis): Evaluates multi-dimensional spatial bounding boxes via `Point3_2.fill_bbox`.
@@ -76,7 +76,7 @@ cc player_session.c $(pkg-config --cflags --libs corm)
 
 * **Zero Lock Contention**: `libcorm` is deliberately single-threaded to achieve optimal L1/L2 CPU cache residency and microsecond-level query latencies without mutex overhead. For multi-core systems, shard maps per worker thread or front with a non-blocking event loop.
 * **Predictable Memory Footprint**: Compact arena and mask-based doubling allocation prevents memory fragmentation during long-running daemon operations.
-* **Unified Recall Composition (`rec.h`)**: Standardizes search queries into a domain-free `"filter by axis → join → rank"` pipeline over uniform 32-bit refs.
+* **Unified Recall Composition (`cormr.h`)**: Standardizes search queries into a domain-free `"filter by axis → join → rank"` pipeline over uniform 32-bit refs.
 
 ---
 

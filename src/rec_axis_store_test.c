@@ -9,7 +9,7 @@
  * round-trip numbers here double-check the CLI behaviour from the C side.
  */
 
-#include <ttypt/rec.h>
+#include <ttypt/corm.h>
 #include <ttypt/qsys.h>
 
 #include <stdio.h>

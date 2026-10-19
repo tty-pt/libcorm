@@ -108,6 +108,7 @@
 
 #include <ttypt/corm.h>
 #include <ttypt/idm.h>
+#include "corm_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -117,14 +118,11 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <sys/stat.h>
-#include <sys/file.h>
-#include <sys/socket.h>
-#include <sys/un.h>
+#include <fcntl.h>
 #include <sys/time.h>
 #include <limits.h>
 #include <errno.h>
 #include <ttypt/qsys.h>
-#include <ttypt/rec.h>
 
 #define DEBUG_LVL 0
 #define DEBUG(lvl, ...) \
@@ -289,7 +287,7 @@ static const struct option cli_long_opts[] = {
  *    dynamic table (optional_argument, shared val CLIP_OPT_PLUGIN) — libc-
  *    portable, keeps `-?`/`-Z` semantics byte-identical. Values point into
  *    argv (stable for the whole run). struct rec_axis_cli_option is the
- *    kernel-owned ABI in <ttypt/rec.h> — never re-declared here. ── */
+ *    kernel-owned ABI in <ttypt/cormr.h> — never re-declared here. ── */
 #define CORM_CLI_PLUGIN_CAP 16
 #define CORM_CLI_PLUGIN_NAME_MAX 63
 #define CORM_CLI_PLUGIN_OPTS_MAX 8
@@ -396,7 +394,6 @@ void corme_print(uint32_t hd, enum corme_mbr t,
 }
 
 static int g_standalone_lock_fd = -1;
-
 static int
 cormd_check_lease(const char *cpath, char *out_sock, size_t sock_len)
 {
@@ -418,14 +415,13 @@ cormd_check_lease(const char *cpath, char *out_sock, size_t sock_len)
 		return -1;
 	}
 
-	struct timespec start_ts;
-	clock_gettime(CLOCK_MONOTONIC, &start_ts);
+	uint64_t start_ms = corm_now_ms();
 
 	while (1) {
-		if (flock(fd, LOCK_EX | LOCK_NB) == 0) {
+		if (corm_flock(fd, LOCK_EX | LOCK_NB) == 0) {
 			/* Exclusive lock acquired! Standalone CLI mode */
-			if (ftruncate(fd, 0) == 0) {
-				dprintf(fd, "{\"pid\":%d,\"owner\":\"cli\"}\n", (int)getpid());
+			if (corm_ftruncate(fd, 0) == 0) {
+				corm_dprintf(fd, "{\"pid\":%d,\"owner\":\"cli\"}\n", (int)getpid());
 			}
 			g_standalone_lock_fd = fd;
 			return 0;
@@ -466,10 +462,7 @@ cormd_check_lease(const char *cpath, char *out_sock, size_t sock_len)
 
 		/* Held by standalone CLI (or in-transition daemon startup).
 		 * Check elapsed time against bounded timeout policy (3000ms). */
-		struct timespec cur_ts;
-		clock_gettime(CLOCK_MONOTONIC, &cur_ts);
-		long elapsed_ms = (cur_ts.tv_sec - start_ts.tv_sec) * 1000 +
-		                  (cur_ts.tv_nsec - start_ts.tv_nsec) / 1000000;
+		uint64_t elapsed_ms = corm_now_ms() - start_ms;
 		if (elapsed_ms >= 3000) {
 			fprintf(stderr, "corm: database locked by concurrent standalone writer (timeout after 3000ms)\n");
 			close(fd);
@@ -477,8 +470,7 @@ cormd_check_lease(const char *cpath, char *out_sock, size_t sock_len)
 		}
 
 		/* Sleep 25ms and retry */
-		struct timespec req = { .tv_sec = 0, .tv_nsec = 25000000 };
-		nanosleep(&req, NULL);
+		corm_sleep_ms(25);
 	}
 }
 
@@ -509,9 +501,14 @@ cormd_forward_mutation(const char *op, const char *target_db, const char *arg, c
 		}
 	}
 
+	if (corm_sock_init() != 0) {
+		fprintf(stderr, "corm: socket subsystem init failed\n");
+		return EXIT_FAILURE;
+	}
+
 	int sfd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sfd < 0) {
-		fprintf(stderr, "corm: socket creation failed: %s\n", strerror(errno));
+		fprintf(stderr, "corm: socket creation failed: %s\n", corm_sock_err());
 		return EXIT_FAILURE;
 	}
 
@@ -524,12 +521,12 @@ cormd_forward_mutation(const char *op, const char *target_db, const char *arg, c
 	struct timeval tv;
 	tv.tv_sec = 3;
 	tv.tv_usec = 0;
-	setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-	setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+	setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
+	setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv, sizeof(tv));
 
 	if (connect(sfd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
 		fprintf(stderr, "corm: database is leased by resident cormd, but daemon is unreachable; direct mutation refused\n");
-		close(sfd);
+		corm_sock_close(sfd);
 		return EXIT_FAILURE;
 	}
 
@@ -539,16 +536,16 @@ cormd_forward_mutation(const char *op, const char *target_db, const char *arg, c
 			op, (int)getpid(), target_db ? target_db : corm_path, arg ? arg : "0", body_len);
 
 	/* Send header and body */
-	if (write(sfd, hdr, strlen(hdr)) != (ssize_t)strlen(hdr)) {
-		fprintf(stderr, "corm: failed sending mutation to daemon: %s\n", strerror(errno));
-		close(sfd);
+	if (corm_sock_write(sfd, hdr, strlen(hdr)) != (ssize_t)strlen(hdr)) {
+		fprintf(stderr, "corm: failed sending mutation to daemon: %s\n", corm_sock_err());
+		corm_sock_close(sfd);
 		return EXIT_FAILURE;
 	}
 	if (body_len > 0) {
-		if (write(sfd, body, body_len) != (ssize_t)body_len) {
+		if (corm_sock_write(sfd, body, body_len) != (ssize_t)body_len) {
 			/* Ambiguous outcome: data partially written */
 			fprintf(stderr, "corm: mutation outcome ambiguous: connection dropped mid-request; replay refused\n");
-			close(sfd);
+			corm_sock_close(sfd);
 			return EXIT_FAILURE;
 		}
 	}
@@ -558,10 +555,10 @@ cormd_forward_mutation(const char *op, const char *target_db, const char *arg, c
 	size_t hpos = 0;
 	while (hpos < sizeof(res_hdr) - 1) {
 		char c;
-		ssize_t n = read(sfd, &c, 1);
+		ssize_t n = corm_sock_read(sfd, &c, 1);
 		if (n <= 0) {
 			fprintf(stderr, "corm: mutation outcome ambiguous: connection closed after sending request; replay refused\n");
-			close(sfd);
+			corm_sock_close(sfd);
 			return EXIT_FAILURE;
 		}
 		res_hdr[hpos++] = c;
@@ -579,23 +576,23 @@ cormd_forward_mutation(const char *op, const char *target_db, const char *arg, c
 	if (res_body_len > 0) {
 		res_body = malloc(res_body_len + 1);
 		if (!res_body) {
-			close(sfd);
+			corm_sock_close(sfd);
 			return EXIT_FAILURE;
 		}
 		size_t bpos = 0;
 		while (bpos < res_body_len) {
-			ssize_t n = read(sfd, res_body + bpos, res_body_len - bpos);
+			ssize_t n = corm_sock_read(sfd, res_body + bpos, res_body_len - bpos);
 			if (n <= 0) {
-				fprintf(stderr, "corm: error reading mutation response body: %s\n", strerror(errno));
+				fprintf(stderr, "corm: error reading mutation response body: %s\n", corm_sock_err());
 				free(res_body);
-				close(sfd);
+				corm_sock_close(sfd);
 				return EXIT_FAILURE;
 			}
 			bpos += n;
 		}
 		res_body[res_body_len] = '\0';
 	}
-	close(sfd);
+	corm_sock_close(sfd);
 
 	if (!strcmp(status, "OK")) {
 		if (res_body && res_body_len > 0) {
@@ -1320,11 +1317,14 @@ struct corm_axis_fx {
 static struct corm_axis_fx corm_axis_fx[REC_QUERY_MAX_AXES];
 
 /* Resolve one optional conventional symbol into fn (memcpy keeps the
- * void*→fn-pointer conversion clean on strict-aliasing builds). */
+ * void*→fn-pointer conversion clean on strict-aliasing builds).
+ * Checks sym_cormr first, falling back to sym_rec if absent. */
 static void
-corm_axes_sym(void *h, const char *symname, void *fn, size_t fnsz, int *have)
+corm_axes_sym(void *h, const char *sym_cormr, const char *sym_rec, void *fn, size_t fnsz, int *have)
 {
-	void *sym = qsys_dlsym(h, symname);
+	void *sym = qsys_dlsym(h, sym_cormr);
+	if (!sym && sym_rec)
+		sym = qsys_dlsym(h, sym_rec);
 	*have = 0;
 	if (!sym)
 		return;
@@ -1345,25 +1345,29 @@ corm_axes_bind(int slot, const char *name)
 			name, slot);
 		return;
 	}
-	void *sym = qsys_dlsym(h, "rec_axis_open");
+	void *sym = qsys_dlsym(h, "cormr_axis_open");
+	if (!sym)
+		sym = qsys_dlsym(h, "rec_axis_open");
 	if (!sym) {
 		fprintf(stderr,
-			"corm: axis '%s': plugin has no rec_axis_open symbol, "
+			"corm: axis '%s': plugin has no cormr_axis_open or rec_axis_open symbol, "
 			"slot %d left ctx-less\n", name, slot);
 		return;
 	}
 	void *(*open_fn)(const char *);
 	memcpy(&open_fn, &sym, sizeof(open_fn));
 	void *ctx = open_fn(spec);
-	rec_axis_set_ctx(slot, ctx);
+	cormr_axis_set_ctx(slot, ctx);
 
 	/* Conventional env-config hook (D8, 2B-2): after binding, invoke the
-	 * plugin's optional `rec_axis_env_config` — same dlsym-by-convention
-	 * pattern as `rec_axis_open`. Each axis implements whatever config
-	 * it needs from its OWN environment; the CLI stays axis-agnostic
+	 * plugin's optional `cormr_axis_env_config` or `rec_axis_env_config` —
+	 * same dlsym-by-convention pattern as `cormr_axis_open`. Each axis implements
+	 * whatever config it needs from its OWN environment; the CLI stays axis-agnostic
 	 * (libsepal reads CORM_SEPAL_EMBED_URL/MODEL/KEY). Missing symbol =
 	 * no-op for that axis. */
-	void *csym = qsys_dlsym(h, "rec_axis_env_config");
+	void *csym = qsys_dlsym(h, "cormr_axis_env_config");
+	if (!csym)
+		csym = qsys_dlsym(h, "rec_axis_env_config");
 	if (csym) {
 		int (*cfg_fn)(void);
 		memcpy(&cfg_fn, &csym, sizeof(cfg_fn));
@@ -1373,15 +1377,15 @@ corm_axes_bind(int slot, const char *name)
 	/* 2B-4 write-half capabilities (D1/D12): dlsym the store/unstore/
 	 * readback convention the same way. Missing store symbols ⇒ the
 	 * axis is read-only (skipped + reported at write time). */
-	if (slot >= 0 && slot < REC_QUERY_MAX_AXES) {
+	if (slot >= 0 && slot < CORMR_QUERY_MAX_AXES) {
 		struct corm_axis_fx *fx = &corm_axis_fx[slot];
-		corm_axes_sym(h, "rec_axis_store", &fx->store_fn,
+		corm_axes_sym(h, "cormr_axis_store", "rec_axis_store", &fx->store_fn,
 				sizeof(fx->store_fn), &fx->has_store);
-		corm_axes_sym(h, "rec_axis_store_typed", &fx->typed_fn,
+		corm_axes_sym(h, "cormr_axis_store_typed", "rec_axis_store_typed", &fx->typed_fn,
 				sizeof(fx->typed_fn), &fx->has_typed);
-		corm_axes_sym(h, "rec_axis_unstore", &fx->unstore_fn,
+		corm_axes_sym(h, "cormr_axis_unstore", "rec_axis_unstore", &fx->unstore_fn,
 				sizeof(fx->unstore_fn), &fx->has_unstore);
-		corm_axes_sym(h, "rec_axis_readback", &fx->readback_fn,
+		corm_axes_sym(h, "cormr_axis_readback", "rec_axis_readback", &fx->readback_fn,
 				sizeof(fx->readback_fn), &fx->has_readback);
 		fx->bound = 1;
 	}
@@ -1492,12 +1496,16 @@ corm_cli_plugin_flush(void)
 			if (plugs[j].h == h) { dup = 1; break; }
 		if (dup)
 			continue;
-		void *osym = qsys_dlsym(h, "rec_axis_cli_options");
+		void *osym = qsys_dlsym(h, "cormr_axis_cli_options");
+		if (!osym)
+			osym = qsys_dlsym(h, "rec_axis_cli_options");
 		if (!osym)
 			continue;
 		const rec_axis_cli_option_t *(*opts_fn)(void);
 		memcpy(&opts_fn, &osym, sizeof(opts_fn));
-		void *cfg_sym = qsys_dlsym(h, "rec_axis_config_arg");
+		void *cfg_sym = qsys_dlsym(h, "cormr_axis_config_arg");
+		if (!cfg_sym)
+			cfg_sym = qsys_dlsym(h, "rec_axis_config_arg");
 		if (!cfg_sym)
 			continue;
 		int (*cfg)(const char *, const char *);
@@ -2769,8 +2777,8 @@ main(int argc, char *argv[])
 	if (expr_root && !query_ran)
 		rc |= corm_composed_get();
 	if (g_standalone_lock_fd >= 0) {
-		ftruncate(g_standalone_lock_fd, 0);
-		flock(g_standalone_lock_fd, LOCK_UN);
+		corm_ftruncate(g_standalone_lock_fd, 0);
+		corm_flock(g_standalone_lock_fd, LOCK_UN);
 		close(g_standalone_lock_fd);
 		g_standalone_lock_fd = -1;
 	}

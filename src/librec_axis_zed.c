@@ -1,7 +1,7 @@
 /* Single-axis "zed" plugin for roster/load tests (2B-1).
  * Registers ONE axis named "zed" — exercises the by-name dlopen
  * path (`@zed` → `libzed.so`). Same shape as stub. */
-#include <ttypt/rec.h>
+#include <ttypt/corm.h>
 #include <stdio.h>
 #include <stdlib.h>
 

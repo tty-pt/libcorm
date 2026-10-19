@@ -1,26 +1,26 @@
 /* rec.c — recall kernel (candidate sets + generic ranking loop).
- * Part of libcorm. See rec.h for the public contract. */
+ * Part of libcorm. See cormr.h for the public contract. */
 
-#include "./../include/ttypt/rec.h"
+#include "./../include/ttypt/cormr.h"
 #include "./../include/ttypt/corm.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#define REC_MIN_CAP 1024
-#define REC_RANK_STACK_PAIRS 1024
+#define CORMR_MIN_CAP 1024
+#define CORMR_RANK_STACK_PAIRS 1024
 
-struct rec_set {
-	rec_ref_t *a;
+struct cormr_set {
+	cormr_ref_t *a;
 	size_t n, cap;
 	int sealed;
-	int approx;         /* REC_SET_EXACT / REC_SET_APPROX */
+	int approx;         /* CORMR_SET_EXACT / CORMR_SET_APPROX */
 	float recall_bound; /* owed recall@k (exact → 1.0) */
-	rec_ref_t inline_a[];
+	cormr_ref_t inline_a[];
 };
 
-struct rec_rank {
-	rec_ref_t *refs;      /* 1..n heap */
+struct cormr_rank {
+	cormr_ref_t *refs;      /* 1..n heap */
 	float *sc;
 	size_t n, cap, top_k;
 	float min;
@@ -29,15 +29,15 @@ struct rec_rank {
 static int
 ref_cmp(const void *x, const void *y)
 {
-	rec_ref_t a = *(const rec_ref_t *)x, b = *(const rec_ref_t *)y;
+	cormr_ref_t a = *(const cormr_ref_t *)x, b = *(const cormr_ref_t *)y;
 	return a < b ? -1 : a > b ? 1 : 0;
 }
 
 static int
-grow(rec_set_t *s)
+grow(cormr_set_t *s)
 {
-	size_t cap = s->cap ? s->cap * 2 : REC_MIN_CAP;
-	rec_ref_t *a;
+	size_t cap = s->cap ? s->cap * 2 : CORMR_MIN_CAP;
+	cormr_ref_t *a;
 
 	if (s->a == s->inline_a) {
 		a = malloc(cap * sizeof(*a));
@@ -54,21 +54,21 @@ grow(rec_set_t *s)
 	return 0;
 }
 
-rec_set_t *
-rec_set_new(void)
+cormr_set_t *
+cormr_set_new(void)
 {
-	rec_set_t *s = calloc(1, sizeof(*s) + REC_MIN_CAP * sizeof(*s->a));
+	cormr_set_t *s = calloc(1, sizeof(*s) + CORMR_MIN_CAP * sizeof(*s->a));
 	if (!s)
 		return NULL;
 	s->a = s->inline_a;
-	s->cap = REC_MIN_CAP;
-	s->approx = REC_SET_EXACT;
+	s->cap = CORMR_MIN_CAP;
+	s->approx = CORMR_SET_EXACT;
 	s->recall_bound = 1.0f;
 	return s;
 }
 
 void
-rec_set_push(rec_set_t *s, rec_ref_t r)
+cormr_set_push(cormr_set_t *s, cormr_ref_t r)
 {
 	if (s->n == s->cap && grow(s))
 		return;
@@ -77,7 +77,7 @@ rec_set_push(rec_set_t *s, rec_ref_t r)
 }
 
 void
-rec_set_seal(rec_set_t *s)
+cormr_set_seal(cormr_set_t *s)
 {
 	if (s->sealed)
 		return;
@@ -93,43 +93,49 @@ rec_set_seal(rec_set_t *s)
 }
 
 int
-rec_set_fill_corm_iter(rec_set_t *s, uint32_t hd)
+cormr_set_drain(cormr_set_t *s, uint32_t hd)
 {
 	uint32_t kt = corm_get_ktype(hd);
 	size_t kl = corm_type_len(kt);
-	if (kl == 0 || kl > sizeof(rec_ref_t))
+	if (kl == 0 || kl > sizeof(cormr_ref_t))
 		return -1;
 
 	uint32_t cur = corm_iter(hd, NULL, 0);
 	const void *key, *value;
-	rec_ref_t r;
+	cormr_ref_t r;
 	while (corm_next(&key, &value, cur)) {
 		memset(&r, 0, sizeof(r));
 		memcpy(&r, key, kl);
-		rec_set_push(s, r);
+		cormr_set_push(s, r);
 	}
 	corm_fin(cur);
 	return 0;
 }
 
+int
+cormr_set_fill_iter(cormr_set_t *s, uint32_t hd)
+{
+	return cormr_set_drain(s, hd);
+}
+
 static int
-check_sealed(const rec_set_t *a, const rec_set_t *b)
+check_sealed(const cormr_set_t *a, const cormr_set_t *b)
 {
 	return a->sealed && b->sealed ? 0 : -1;
 }
 
 static void
-join_exactness(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
+join_exactness(cormr_set_t *dst, const cormr_set_t *a, const cormr_set_t *b)
 {
 	/* intersect/union: result approximates as soon as either operand does;
 	 * owed recall is bounded by the weaker (min) operand. */
-	dst->approx = (a->approx || b->approx) ? REC_SET_APPROX : REC_SET_EXACT;
+	dst->approx = (a->approx || b->approx) ? CORMR_SET_APPROX : CORMR_SET_EXACT;
 	dst->recall_bound = a->recall_bound < b->recall_bound
 		? a->recall_bound : b->recall_bound;
 }
 
 int
-rec_set_intersect(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
+cormr_set_intersect(cormr_set_t *dst, const cormr_set_t *a, const cormr_set_t *b)
 {
 	if (check_sealed(a, b))
 		return -1;
@@ -142,7 +148,7 @@ rec_set_intersect(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
 		else if (a->a[i] > b->a[j])
 			j++;
 		else {
-			rec_set_push(dst, a->a[i]);
+			cormr_set_push(dst, a->a[i]);
 			i++;
 			j++;
 		}
@@ -153,7 +159,7 @@ rec_set_intersect(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
 }
 
 int
-rec_set_subtract(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
+cormr_set_subtract(cormr_set_t *dst, const cormr_set_t *a, const cormr_set_t *b)
 {
 	if (check_sealed(a, b))
 		return -1;
@@ -166,7 +172,7 @@ rec_set_subtract(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
 		if (j < b->n && b->a[j] == a->a[i])
 			i++;
 		else
-			rec_set_push(dst, a->a[i++]);
+			cormr_set_push(dst, a->a[i++]);
 	}
 	dst->sealed = 1;
 	dst->approx = a->approx;       /* result ⊆ a: keeps a's exactness */
@@ -175,7 +181,7 @@ rec_set_subtract(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
 }
 
 int
-rec_set_union(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
+cormr_set_union(cormr_set_t *dst, const cormr_set_t *a, const cormr_set_t *b)
 {
 	if (check_sealed(a, b))
 		return -1;
@@ -184,11 +190,11 @@ rec_set_union(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
 	size_t i = 0, j = 0;
 	while (i < a->n || j < b->n) {
 		if (j == b->n || (i < a->n && a->a[i] < b->a[j]))
-			rec_set_push(dst, a->a[i++]);
+			cormr_set_push(dst, a->a[i++]);
 		else if (i == a->n || b->a[j] < a->a[i])
-			rec_set_push(dst, b->a[j++]);
+			cormr_set_push(dst, b->a[j++]);
 		else {
-			rec_set_push(dst, a->a[i++]);
+			cormr_set_push(dst, a->a[i++]);
 			j++;
 		}
 	}
@@ -198,23 +204,23 @@ rec_set_union(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b)
 }
 
 size_t
-rec_set_count(const rec_set_t *s)
+cormr_set_count(const cormr_set_t *s)
 {
 	return s->n;
 }
 
-const rec_ref_t *
-rec_set_at(const rec_set_t *s)
+const cormr_ref_t *
+cormr_set_at(const cormr_set_t *s)
 {
 	return s->a;
 }
 
 int
-rec_set_set_approx(rec_set_t *s, int approx, float recall_bound)
+cormr_set_approx(cormr_set_t *s, int approx, float recall_bound)
 {
 	if (!s)
 		return -1;
-	if (approx != REC_SET_EXACT && approx != REC_SET_APPROX)
+	if (approx != CORMR_SET_EXACT && approx != CORMR_SET_APPROX)
 		return -1;
 	if (recall_bound <= 0.0f || recall_bound > 1.0f)
 		return -1;
@@ -224,19 +230,19 @@ rec_set_set_approx(rec_set_t *s, int approx, float recall_bound)
 }
 
 int
-rec_set_approx(const rec_set_t *s)
+cormr_set_is_approx(const cormr_set_t *s)
 {
-	return s ? s->approx : REC_SET_EXACT;
+	return s ? s->approx : CORMR_SET_EXACT;
 }
 
 float
-rec_set_recall_bound(const rec_set_t *s)
+cormr_set_bound(const cormr_set_t *s)
 {
 	return s ? s->recall_bound : 1.0f;
 }
 
 void
-rec_set_free(rec_set_t *s)
+cormr_set_free(cormr_set_t *s)
 {
 	if (!s)
 		return;
@@ -252,7 +258,7 @@ rec_set_free(rec_set_t *s)
  * Rank: higher score is better/min-worse; equal score → lower ref better. */
 
 static int
-better(rec_ref_t ar, float as, rec_ref_t br, float bs)
+better(cormr_ref_t ar, float as, cormr_ref_t br, float bs)
 {
 	if (as != bs)
 		return as > bs;
@@ -260,15 +266,15 @@ better(rec_ref_t ar, float as, rec_ref_t br, float bs)
 }
 
 static void
-swp(rec_rank_t *rk, size_t i, size_t j)
+swp(cormr_rank_t *rk, size_t i, size_t j)
 {
-	rec_ref_t tr = rk->refs[i]; float ts = rk->sc[i];
+	cormr_ref_t tr = rk->refs[i]; float ts = rk->sc[i];
 	rk->refs[i] = rk->refs[j]; rk->sc[i] = rk->sc[j];
 	rk->refs[j] = tr; rk->sc[j] = ts;
 }
 
 static void
-sift_up(rec_rank_t *rk, size_t i)
+sift_up(cormr_rank_t *rk, size_t i)
 {
 	while (i > 1) {
 		size_t p = i / 2;
@@ -281,7 +287,7 @@ sift_up(rec_rank_t *rk, size_t i)
 }
 
 static void
-sift_down(rec_rank_t *rk, size_t i)
+sift_down(cormr_rank_t *rk, size_t i)
 {
 	for (;;) {
 		size_t l = i * 2, r = l + 1, m = i;
@@ -298,10 +304,10 @@ sift_down(rec_rank_t *rk, size_t i)
 	}
 }
 
-rec_rank_t *
-rec_rank_new(size_t top_k, float min_score)
+cormr_rank_t *
+cormr_rank_new(size_t top_k, float min_score)
 {
-	rec_rank_t *rk;
+	cormr_rank_t *rk;
 	size_t n;
 
 	if (top_k == 0)
@@ -310,7 +316,7 @@ rec_rank_new(size_t top_k, float min_score)
 	rk = malloc(sizeof(*rk) + n * sizeof(*rk->refs) + n * sizeof(*rk->sc));
 	if (!rk)
 		return NULL;
-	rk->refs = (rec_ref_t *)((char *)rk + sizeof(*rk));
+	rk->refs = (cormr_ref_t *)((char *)rk + sizeof(*rk));
 	rk->sc = (float *)((char *)rk->refs + n * sizeof(*rk->refs));
 	rk->n = 0;
 	rk->cap = top_k;
@@ -320,7 +326,7 @@ rec_rank_new(size_t top_k, float min_score)
 }
 
 void
-rec_rank_push(rec_rank_t *rk, rec_ref_t r, float score)
+cormr_rank_push(cormr_rank_t *rk, cormr_ref_t r, float score)
 {
 	if (score < rk->min)
 		return;
@@ -335,7 +341,7 @@ rec_rank_push(rec_rank_t *rk, rec_ref_t r, float score)
 	}
 }
 
-typedef struct { rec_ref_t r; float s; } pair_t;
+typedef struct { cormr_ref_t r; float s; } pair_t;
 
 static int
 pair_cmp(const void *x, const void *y)
@@ -347,15 +353,15 @@ pair_cmp(const void *x, const void *y)
 }
 
 size_t
-rec_rank_sorted(const rec_rank_t *rk, rec_ref_t *refs, float *scores)
+cormr_rank_sorted(const cormr_rank_t *rk, cormr_ref_t *refs, float *scores)
 {
-	pair_t stack[REC_RANK_STACK_PAIRS];
+	pair_t stack[CORMR_RANK_STACK_PAIRS];
 	pair_t *pairs;
 	size_t i;
 
 	if (rk->n == 0)
 		return 0;
-	if (rk->n <= REC_RANK_STACK_PAIRS) {
+	if (rk->n <= CORMR_RANK_STACK_PAIRS) {
 		pairs = stack;
 	} else {
 		pairs = malloc(rk->n * sizeof(*pairs));
@@ -378,7 +384,28 @@ rec_rank_sorted(const rec_rank_t *rk, rec_ref_t *refs, float *scores)
 }
 
 void
-rec_rank_free(rec_rank_t *rk)
+cormr_rank_free(cormr_rank_t *rk)
 {
 	free(rk);
 }
+
+/* ── Backward compatibility wrappers for rec_* symbols ─────────────── */
+
+rec_set_t *rec_set_new(void) { return cormr_set_new(); }
+void rec_set_push(rec_set_t *s, rec_ref_t r) { cormr_set_push(s, r); }
+void rec_set_seal(rec_set_t *s) { cormr_set_seal(s); }
+int rec_set_fill_corm_iter(rec_set_t *s, uint32_t hd) { return cormr_set_drain(s, hd); }
+int rec_set_intersect(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b) { return cormr_set_intersect(dst, a, b); }
+int rec_set_subtract(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b) { return cormr_set_subtract(dst, a, b); }
+int rec_set_union(rec_set_t *dst, const rec_set_t *a, const rec_set_t *b) { return cormr_set_union(dst, a, b); }
+size_t rec_set_count(const rec_set_t *s) { return cormr_set_count(s); }
+const rec_ref_t *rec_set_at(const rec_set_t *s) { return cormr_set_at(s); }
+void rec_set_free(rec_set_t *s) { cormr_set_free(s); }
+int rec_set_set_approx(rec_set_t *s, int approx, float recall_bound) { return cormr_set_approx(s, approx, recall_bound); }
+int rec_set_approx(const rec_set_t *s) { return cormr_set_is_approx(s); }
+float rec_set_recall_bound(const rec_set_t *s) { return cormr_set_bound(s); }
+
+rec_rank_t *rec_rank_new(size_t top_k, float min_score) { return cormr_rank_new(top_k, min_score); }
+void rec_rank_push(rec_rank_t *rk, rec_ref_t r, float score) { cormr_rank_push(rk, r, score); }
+size_t rec_rank_sorted(const rec_rank_t *rk, rec_ref_t *refs, float *scores) { return cormr_rank_sorted(rk, refs, scores); }
+void rec_rank_free(rec_rank_t *rk) { cormr_rank_free(rk); }

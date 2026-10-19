@@ -1,5 +1,5 @@
 INSTALL_BIN := corm cormd
-all := libcorm corm cormd test test_extended test_multivalue test_record test_persist rec_test rec_axis_test rec_axis_store_test rec_cli_test rec_axis_bench bench_multivalue bench_rec
+all := libcorm corm cormd test test_extended test_multivalue test_record test_persist rec_test rec_axis_test rec_axis_store_test rec_cli_test cormr_test rec_axis_bench bench_multivalue bench_rec
 
 LDLIBS-libcorm := -lxxhash -lqsys
 LDLIBS-libcorm-Windows := -lmman
@@ -16,13 +16,18 @@ LDLIBS-rec_test := -lcorm
 LDLIBS-rec_axis_test := -lcorm
 LDLIBS-rec_axis_store_test := -lcorm -lqsys
 LDLIBS-rec_cli_test := -lcorm
+LDLIBS-cormr_test := -lcorm
 LDLIBS-corm := -lcorm -lqsys
+LDLIBS-corm-Windows := -lws2_32
 LDLIBS-cormd := -lcorm -lqsys
+LDLIBS-cormd-Windows := -lws2_32 -lpsapi
 LDLIBS-save_test := -lcorm
 LDLIBS-librec_axis_mock := -lcorm
 LDLIBS-librec_axis_fold := -lcorm
 
 libcorm-obj-y := src/idm.o src/rec.o src/rec_axis.o src/rec_cli.o
+
+add-prefix := ../libqsys
 
 CFLAGS += -g
 

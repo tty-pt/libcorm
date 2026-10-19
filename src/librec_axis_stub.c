@@ -2,7 +2,7 @@
  * Registers ONE axis named "stub" — exercises the by-name dlopen
  * path (`@stub` → `libstub.so`). Rec_axis_open returns a non-NULL
  * dummy ctx so bind() is observable via --list-axes. */
-#include <ttypt/rec.h>
+#include <ttypt/corm.h>
 #include <stdio.h>
 #include <stdlib.h>
 

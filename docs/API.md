@@ -176,7 +176,7 @@ libcorm provides a free-list ID allocator (`idm_t`) for managing reusable intege
 
 ---
 
-## Recall Kernel (`rec.h`)
+## Recall Kernel (`cormr.h`)
 
 | Function | Signature | Description |
 |----------|-----------|-------------|

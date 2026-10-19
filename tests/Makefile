@@ -7,7 +7,7 @@
 # Links against the system-installed libcorm.so/libqsys.so (the same ones
 # libjoint.so/libsepal.so were built against -- one loaded copy of each,
 # avoids duplicate global-registry state at runtime) and this repo's
-# ttypt/corm.h + ttypt/rec.h (byte-identical to the installed copies).
+# ttypt/corm.h (byte-identical to the installed copies).
 
 JOINT_DIR := $(HOME)/libjoint
 SEPAL_DIR := $(HOME)/libsepal

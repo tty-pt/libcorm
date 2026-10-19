@@ -9,8 +9,8 @@
 
 #include <ttypt/corm.h>
 #include <ttypt/idm.h>
-#include <ttypt/rec.h>
 #include <ttypt/qsys.h>
+#include "corm_compat.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,11 +26,6 @@
 #include <libgen.h>
 #include <limits.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/poll.h>
-#include <sys/file.h>
-#include <sys/resource.h>
 
 #define CM_MAX 1024
 #define QDBE_MASK (256 - 1)
@@ -1021,7 +1016,7 @@ static void
 client_close(struct client *c)
 {
 	if (c->fd >= 0) {
-		close(c->fd);
+		corm_sock_close(c->fd);
 		c->fd = -1;
 	}
 	free(c->in_buf);
@@ -1085,7 +1080,8 @@ check_database_match(const char *req_filespec)
 	char req_dir_real[PATH_MAX] = {0};
 	char srv_dir_real[PATH_MAX] = {0};
 
-	if (!realpath(rd, req_dir_real) || !realpath(sd, srv_dir_real))
+	if (!corm_realpath(rd, req_dir_real, sizeof(req_dir_real)) ||
+	    !corm_realpath(sd, srv_dir_real, sizeof(srv_dir_real)))
 		return 0;
 
 	if (strcmp(req_dir_real, srv_dir_real) != 0)
@@ -1229,8 +1225,7 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 	}
 
 	if (!strcmp(op, "STATS")) {
-		struct rusage ru;
-		getrusage(RUSAGE_SELF, &ru);
+		uint64_t rss = corm_self_rss_bytes();
 		time_t uptime = time(NULL) - start_time;
 
 		/* Count records in primary handle */
@@ -1244,7 +1239,7 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 		char sbuf[256];
 		int slen = snprintf(sbuf, sizeof(sbuf),
 				"{\"records\":%u,\"rss_bytes\":%ld,\"uptime_sec\":%ld}\n",
-				count, (long)(ru.ru_maxrss * 1024), (long)uptime);
+				count, (long)rss, (long)uptime);
 		respond_ok(c, req_id, sbuf, slen);
 		return;
 	}
@@ -1691,9 +1686,9 @@ main(int argc, char *argv[])
 			char *pp = strstr(lbuf, "\"pid\":");
 			if (pp)
 				held_pid = atoi(pp + 6);
-			if (held_pid > 0 && kill(held_pid, 0) == 0) {
+			if (held_pid > 0 && corm_pid_alive(held_pid) == 0) {
 				fclose(f);
-				usleep(50000); /* 50ms */
+				corm_sleep_ms(50); /* 50ms */
 				if (attempts == 39)
 					contention_timeout = 1;
 				continue;
@@ -1712,8 +1707,8 @@ main(int argc, char *argv[])
 	/* Ensure parent directory exists for socket and lock */
 	char sock_dir_buf[BUFSIZ];
 	snprintf(sock_dir_buf, sizeof(sock_dir_buf), "%s", socket_path);
-	mkdir(dirname(sock_dir_buf), 0755);
-	mkdir(db_dir, 0755);
+	corm_mkdir(dirname(sock_dir_buf));
+	corm_mkdir(db_dir);
 
 	/* 1. Acquire exclusive lifetime non-blocking flock on .cormd.lock */
 	lock_fd = open(lock_path, O_RDWR | O_CREAT, 0644);
@@ -1721,13 +1716,13 @@ main(int argc, char *argv[])
 		fprintf(stderr, "cormd: open %s failed: %s\n", lock_path, strerror(errno));
 		return EXIT_FAILURE;
 	}
-	if (flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
+	if (corm_flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
 		fprintf(stderr, "cormd: database leased by another daemon instance (%s): %s\n",
 				lock_path, strerror(errno));
 		close(lock_fd);
 		return EXIT_FAILURE;
 	}
-	if (ftruncate(lock_fd, 0) == 0) {
+	if (corm_ftruncate(lock_fd, 0) == 0) {
 		char sock_abs[BUFSIZ * 2];
 		if (socket_path[0] == '/') {
 			snprintf(sock_abs, sizeof(sock_abs), "%s", socket_path);
@@ -1738,7 +1733,7 @@ main(int argc, char *argv[])
 			else
 				snprintf(sock_abs, sizeof(sock_abs), "%s", socket_path);
 		}
-		dprintf(lock_fd, "{\"pid\":%d,\"owner\":\"daemon\",\"started\":%ld,\"socket\":\"%s\"}\n",
+		corm_dprintf(lock_fd, "{\"pid\":%d,\"owner\":\"daemon\",\"started\":%ld,\"socket\":\"%s\"}\n",
 				(int)getpid(), (long)start_time, sock_abs);
 	}
 
@@ -1747,6 +1742,10 @@ main(int argc, char *argv[])
 	corm_axes_setup();
 
 	/* 3. Setup Unix Domain Socket */
+	if (corm_sock_init() != 0) {
+		fprintf(stderr, "cormd: socket subsystem init failed\n");
+		return EXIT_FAILURE;
+	}
 	struct sockaddr_un addr;
 	if (strlen(socket_path) >= sizeof(addr.sun_path)) {
 		fprintf(stderr, "cormd: socket path too long (max %zu): %s\n",
@@ -1762,41 +1761,36 @@ main(int argc, char *argv[])
 	if (test_fd >= 0) {
 		if (connect(test_fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
 			fprintf(stderr, "cormd: socket %s is already in use by active server\n", socket_path);
-			close(test_fd);
-			flock(lock_fd, LOCK_UN);
+			corm_sock_close(test_fd);
+			corm_flock(lock_fd, LOCK_UN);
 			close(lock_fd);
 			return EXIT_FAILURE;
 		}
-		close(test_fd);
+		corm_sock_close(test_fd);
 		unlink(socket_path);
 	}
 
 	server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (server_fd < 0) {
-		fprintf(stderr, "cormd: socket create failed: %s\n", strerror(errno));
+		fprintf(stderr, "cormd: socket create failed: %s\n", corm_sock_err());
 		return EXIT_FAILURE;
 	}
-	int flags = fcntl(server_fd, F_GETFL, 0);
-	fcntl(server_fd, F_SETFL, flags | O_NONBLOCK);
+	corm_sock_nonblock(server_fd);
 
 	if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-		fprintf(stderr, "cormd: bind %s failed: %s\n", socket_path, strerror(errno));
-		close(server_fd);
+		fprintf(stderr, "cormd: bind %s failed: %s\n", socket_path, corm_sock_err());
+		corm_sock_close(server_fd);
 		return EXIT_FAILURE;
 	}
 	if (listen(server_fd, 64) != 0) {
-		fprintf(stderr, "cormd: listen failed: %s\n", strerror(errno));
-		close(server_fd);
+		fprintf(stderr, "cormd: listen failed: %s\n", corm_sock_err());
+		corm_sock_close(server_fd);
 		return EXIT_FAILURE;
 	}
 
 	/* 4. Setup Signal Handlers */
-	struct sigaction sa;
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_handler = sig_handler;
-	sigaction(SIGTERM, &sa, NULL);
-	sigaction(SIGINT, &sa, NULL);
-	signal(SIGPIPE, SIG_IGN);
+	corm_stop_on_signal(sig_handler);
+	corm_ignore_pipe();
 
 	/* Initialize clients table */
 	for (int i = 0; i < MAX_CLIENTS; i++)
@@ -1824,7 +1818,7 @@ main(int argc, char *argv[])
 			}
 		}
 
-		int pr = poll(pfds, nfds, 1000);
+		int pr = corm_poll(pfds, nfds, 1000);
 		if (pr < 0) {
 			if (errno == EINTR)
 				continue;
@@ -1834,11 +1828,10 @@ main(int argc, char *argv[])
 		/* Check server readable (incoming connections) */
 		if (pfds[0].revents & POLLIN) {
 			while (1) {
-				int cfd = accept(server_fd, NULL, NULL);
+				int cfd = (int)accept(server_fd, NULL, NULL);
 				if (cfd < 0)
 					break;
-				int cflags = fcntl(cfd, F_GETFL, 0);
-				fcntl(cfd, F_SETFL, cflags | O_NONBLOCK);
+				corm_sock_nonblock(cfd);
 
 				int slot = -1;
 				for (int i = 0; i < MAX_CLIENTS; i++) {
@@ -1854,7 +1847,7 @@ main(int argc, char *argv[])
 					clients[slot].out_pos = 0;
 				} else {
 					/* Over capacity: close immediately */
-					close(cfd);
+					corm_sock_close(cfd);
 				}
 			}
 		}
@@ -1869,14 +1862,14 @@ main(int argc, char *argv[])
 			/* Handle client writes */
 			if (pfds[p].revents & POLLOUT) {
 				if (c->out_len > c->out_pos) {
-					ssize_t nw = write(c->fd, c->out_buf + c->out_pos, c->out_len - c->out_pos);
+					ssize_t nw = corm_sock_write(c->fd, c->out_buf + c->out_pos, c->out_len - c->out_pos);
 					if (nw > 0) {
 						c->out_pos += (size_t)nw;
 						if (c->out_pos == c->out_len) {
 							c->out_pos = 0;
 							c->out_len = 0;
 						}
-					} else if (nw < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+					} else if (nw < 0 && !corm_sock_wouldblock()) {
 						client_close(c);
 						continue;
 					}
@@ -1886,9 +1879,9 @@ main(int argc, char *argv[])
 			/* Handle client reads */
 			if (pfds[p].revents & (POLLIN | POLLHUP | POLLERR)) {
 				char chunk[16384];
-				ssize_t nr = read(c->fd, chunk, sizeof(chunk));
+				ssize_t nr = corm_sock_read(c->fd, chunk, sizeof(chunk));
 				if (nr <= 0) {
-					if (nr < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+					if (nr < 0 && corm_sock_wouldblock())
 						continue;
 					client_close(c);
 					continue;
@@ -1948,7 +1941,7 @@ main(int argc, char *argv[])
 
 				/* Try flushing response immediately */
 				if (c->fd >= 0 && c->out_len > c->out_pos) {
-					ssize_t nw = write(c->fd, c->out_buf + c->out_pos, c->out_len - c->out_pos);
+					ssize_t nw = corm_sock_write(c->fd, c->out_buf + c->out_pos, c->out_len - c->out_pos);
 					if (nw > 0) {
 						c->out_pos += (size_t)nw;
 						if (c->out_pos == c->out_len) {
@@ -1968,11 +1961,11 @@ main(int argc, char *argv[])
 		client_close(&clients[i]);
 
 	if (server_fd >= 0) {
-		close(server_fd);
+		corm_sock_close(server_fd);
 		unlink(socket_path);
 	}
 	if (lock_fd >= 0) {
-		flock(lock_fd, LOCK_UN);
+		corm_flock(lock_fd, LOCK_UN);
 		close(lock_fd);
 	}
 
