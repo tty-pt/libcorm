@@ -38,7 +38,6 @@
 #include <string.h>
 #include <time.h>
 #include <ttypt/corm.h>
-#include <ttypt/rec.h>
 #include <ttypt/joint.h>
 #include <ttypt/sepal.h>
 

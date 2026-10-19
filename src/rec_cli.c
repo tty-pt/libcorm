@@ -1,16 +1,16 @@
 /**
  * @file rec_cli.c
  * @brief Kernel-owned axis CLI ABI: decode-spec scanner + strict value
- *        parsers (rec.h @ref rec_axis_cli).
+ *        parsers (cormr.h @ref cormr_axis_cli).
  *
  * These are the SINGLE implementation of the D14/D15B shared helpers. An
- * axis library defines only its option table (rec_axis_cli_options) and
+ * axis library defines only its option table (cormr_axis_cli_options) and
  * its per-field mapping; everything else — the struct layout, the
  * decode-spec grammar, the strict value parsing, the owned-string setter —
  * lives here in the kernel and is shared by every TU that includes
- * <ttypt/rec.h>. Never re-declare any of this locally.
+ * <ttypt/cormr.h>. Never re-declare any of this locally.
  */
-#include <ttypt/rec.h>
+#include <ttypt/cormr.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -20,7 +20,7 @@
 #include <string.h>
 
 int
-rec_cli_str_set(char **dst, const char *value)
+cormr_cli_str_set(char **dst, const char *value)
 {
 	char *copy;
 
@@ -35,8 +35,8 @@ rec_cli_str_set(char **dst, const char *value)
 }
 
 int
-rec_spec_scan(const char **cur, const char **key, size_t *klen,
-              const char **val, size_t *vlen, int *quoted)
+cormr_spec_scan(const char **cur, const char **key, size_t *klen,
+                const char **val, size_t *vlen, int *quoted)
 {
 	const char *p, *s;
 
@@ -93,8 +93,9 @@ rec_spec_scan(const char **cur, const char **key, size_t *klen,
 	*cur = p;
 	return 1;
 }
+
 int
-rec_cli_int_b(const char *v, const char *v_end, int *out)
+cormr_cli_int_b(const char *v, const char *v_end, int *out)
 {
 	char *end = NULL;
 	long n;
@@ -111,15 +112,15 @@ rec_cli_int_b(const char *v, const char *v_end, int *out)
 }
 
 int
-rec_cli_int(const char *v, int *out)
+cormr_cli_int(const char *v, int *out)
 {
 	if (!v || !out)
 		return -1;
-	return rec_cli_int_b(v, v + strlen(v), out);
+	return cormr_cli_int_b(v, v + strlen(v), out);
 }
 
 int
-rec_cli_uint_b(const char *v, const char *v_end, unsigned *out)
+cormr_cli_uint_b(const char *v, const char *v_end, unsigned *out)
 {
 	char *end = NULL;
 	unsigned long n;
@@ -135,15 +136,15 @@ rec_cli_uint_b(const char *v, const char *v_end, unsigned *out)
 }
 
 int
-rec_cli_uint(const char *v, unsigned *out)
+cormr_cli_uint(const char *v, unsigned *out)
 {
 	if (!v || !out)
 		return -1;
-	return rec_cli_uint_b(v, v + strlen(v), out);
+	return cormr_cli_uint_b(v, v + strlen(v), out);
 }
 
 int
-rec_cli_size_b(const char *v, const char *v_end, size_t *out)
+cormr_cli_size_b(const char *v, const char *v_end, size_t *out)
 {
 	char *end = NULL;
 	unsigned long long n;
@@ -159,15 +160,15 @@ rec_cli_size_b(const char *v, const char *v_end, size_t *out)
 }
 
 int
-rec_cli_size(const char *v, size_t *out)
+cormr_cli_size(const char *v, size_t *out)
 {
 	if (!v || !out)
 		return -1;
-	return rec_cli_size_b(v, v + strlen(v), out);
+	return cormr_cli_size_b(v, v + strlen(v), out);
 }
 
 int
-rec_cli_float_b(const char *v, const char *v_end, float *out)
+cormr_cli_float_b(const char *v, const char *v_end, float *out)
 {
 	char *end = NULL;
 	float f;
@@ -186,15 +187,15 @@ rec_cli_float_b(const char *v, const char *v_end, float *out)
 }
 
 int
-rec_cli_float(const char *v, float *out)
+cormr_cli_float(const char *v, float *out)
 {
 	if (!v || !out)
 		return -1;
-	return rec_cli_float_b(v, v + strlen(v), out);
+	return cormr_cli_float_b(v, v + strlen(v), out);
 }
 
 int
-rec_cli_str_dup(const char *v, size_t n, int quoted, char **out)
+cormr_cli_str_dup(const char *v, size_t n, int quoted, char **out)
 {
 	char *copy, *w;
 	size_t i;
@@ -217,4 +218,62 @@ rec_cli_str_dup(const char *v, size_t n, int quoted, char **out)
 	}
 	*out = copy;
 	return 0;
+}
+
+/* ── Backward compatibility wrappers for rec_cli_* / rec_spec_scan ──── */
+
+int rec_cli_str_set(char **dst, const char *value)
+{
+	return cormr_cli_str_set(dst, value);
+}
+
+int rec_spec_scan(const char **cur, const char **key, size_t *klen,
+                  const char **val, size_t *vlen, int *quoted)
+{
+	return cormr_spec_scan(cur, key, klen, val, vlen, quoted);
+}
+
+int rec_cli_int_b(const char *v, const char *v_end, int *out)
+{
+	return cormr_cli_int_b(v, v_end, out);
+}
+
+int rec_cli_int(const char *v, int *out)
+{
+	return cormr_cli_int(v, out);
+}
+
+int rec_cli_uint_b(const char *v, const char *v_end, unsigned *out)
+{
+	return cormr_cli_uint_b(v, v_end, out);
+}
+
+int rec_cli_uint(const char *v, unsigned *out)
+{
+	return cormr_cli_uint(v, out);
+}
+
+int rec_cli_size_b(const char *v, const char *v_end, size_t *out)
+{
+	return cormr_cli_size_b(v, v_end, out);
+}
+
+int rec_cli_size(const char *v, size_t *out)
+{
+	return cormr_cli_size(v, out);
+}
+
+int rec_cli_float_b(const char *v, const char *v_end, float *out)
+{
+	return cormr_cli_float_b(v, v_end, out);
+}
+
+int rec_cli_float(const char *v, float *out)
+{
+	return cormr_cli_float(v, out);
+}
+
+int rec_cli_str_dup(const char *v, size_t n, int quoted, char **out)
+{
+	return cormr_cli_str_dup(v, n, quoted, out);
 }

@@ -1,4 +1,3 @@
-#include "./../include/ttypt/rec.h"
 #include "./../include/ttypt/corm.h"
 
 #include <stdio.h>

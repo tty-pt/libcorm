@@ -925,6 +925,16 @@ void corm_record_field_set_target_hd(uint32_t record_id,
                                      uint32_t target_hd);
 
 /**
+ * @brief Concise aliases for record schema operations.
+ */
+typedef corm_record_field_t corm_field_t;
+#define corm_field_target   corm_record_field_set_target_hd
+#define corm_rec_reg        corm_record_register
+#define corm_rec_type       corm_record_type_id
+#define corm_del_val        corm_del_value
+
+
+/**
  * @brief Put a field value into a record-aware map, auto-resolving
  *        references when the field is CM_REFERENCE / CM_MULTI_REFERENCE
  *        and target_hd is set.
@@ -961,5 +971,7 @@ const char *corm_field_get(uint32_t hd, const char *item_id,
                            const char *field_name);
 
 /** @} */
+
+#include "./cormr.h"
 
 #endif /* CORM_H */

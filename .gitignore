@@ -5,3 +5,4 @@
 /*.db
 /*.corm
 /man
+*.lock

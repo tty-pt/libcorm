@@ -1,7 +1,7 @@
 /* rec_axis_test.c — unit tests for the axis registry + query engine
  * (rec_axis.c). Uses mock axes only; no concrete axis library is loaded. */
 
-#include "./../include/ttypt/rec.h"
+#include "./../include/ttypt/corm.h"
 
 #include <stdio.h>
 #include <string.h>

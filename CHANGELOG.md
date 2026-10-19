@@ -1,3 +1,26 @@
+## 2.0.0
+
+- **Recall Kernel Overhaul & `rec.h` Elimination**:
+  - Replaced legacy `rec.h` with `<ttypt/cormr.h>` and unified umbrella inclusion in `<ttypt/corm.h>`.
+  - Canonical `cormr_*` symbol and type namespace (`cormr_set_t`, `cormr_rank_t`, `cormr_axis_t`, `cormr_query_t`, `cormr_join_t`).
+  - Streamlined and shortened record schema APIs:
+    * `corm_record_register` → `corm_rec_reg`
+    * `corm_record_field_set_target_hd` → `corm_field_target`
+    * `corm_record_type_id` → `corm_rec_type`
+    * `corm_record_field_t` → `corm_field_t`
+    * `rec_set_fill_corm_iter` → `cormr_set_drain`
+    * `rec_set_recall_bound` → `cormr_set_bound`
+    * `rec_axis_cli_option_t` → `cormr_axis_opts`
+  - Multi-axis query composition engine: `cormr_query_run` with boolean expression parser (`cormr_spec_scan`) and bounded CLI flag parsers (`cormr_cli_*`).
+- **Resident Memory Daemon (`cormd`)**:
+  - Standalone daemon keeping primary database files and search indexes (lemma, joint) resident in memory across requests.
+  - Eliminates repetitive process startup and lexical index reconstruction overhead.
+- **Value Copy & Chain Primitives**:
+  - `corm_get_copy()`: copies value out by measured length without caller buffer truncation hazards.
+  - `corm_next_copy()`: copies key and value during iteration.
+  - `corm_del_value()`: deletes specific matching value from a duplicate chain.
+  - Cursor release idempotency fix in `corm_fin()`.
+
 ## 1.5.0
 
 Three new public primitives, plus a real fix to cursor teardown. All three copy-or-delete helpers exist to remove hand-rolled boilerplate at `corm_get()` / `corm_next()` call sites, where each call site had to re-derive the destination size — and where the size was routinely derived wrongly (see the measured-type trap below).

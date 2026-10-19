@@ -24,7 +24,7 @@
  * for the two-axes-in-one-constructor deviation explained above, which is
  * purely a test-plugin convenience, not a convention real axis libs follow.
  */
-#include <ttypt/rec.h>
+#include <ttypt/corm.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

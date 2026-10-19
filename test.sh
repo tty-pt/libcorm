@@ -31,6 +31,7 @@ rm -f p.db
 ./bin/rec_axis_test
 ./bin/rec_axis_store_test
 ./bin/rec_cli_test
+./bin/cormr_test
 
 adb=a.db:a:u
 bdb=b.db:a

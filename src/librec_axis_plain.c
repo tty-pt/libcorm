@@ -6,7 +6,7 @@
  * primaries (text-only axis).  The stash is file-backed
  * (`<dir>/<primary>-plain.wr`, HNDL→string), so the gate's dlopen-based verifier
  * can read back cross-process what the CLI fan-out stored. */
-#include <ttypt/rec.h>
+#include <ttypt/corm.h>
 #include <ttypt/corm.h>
 #include <stdint.h>
 #include <stdio.h>

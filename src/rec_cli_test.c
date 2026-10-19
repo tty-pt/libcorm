@@ -4,7 +4,7 @@
  * share (single-quoted values with backslash escapes, bare tokens, empty
  * values, tab/space separation). */
 
-#include "./../include/ttypt/rec.h"
+#include "./../include/ttypt/corm.h"
 
 #include <stdio.h>
 #include <string.h>

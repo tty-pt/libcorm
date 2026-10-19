@@ -873,11 +873,9 @@ corm_open(const char *filename,
       }
       if (live) {
         corm_head_t *ahead = &corm_heads[ahd];
-        uint32_t amask = mask ? mask : CM_DEFAULT_MASK;
         if (ahead->record_id == record_id
             && ahead->types[CM_KEY] == ktype
-            && ahead->types[CM_VALUE] == vtype
-            && ahead->mask == amask)
+            && ahead->types[CM_VALUE] == vtype)
           return ahd;
       }
     }
@@ -2348,6 +2346,7 @@ corm_close(uint32_t hd)
     free(corm->table);
   corm->omap = NULL;
   idm_del(&idm, hd);
+  mdbs[hd] = 0;
 
   // remove any file associations so we don't try
   // saving it to a file after it is closed.
