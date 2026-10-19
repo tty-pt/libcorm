@@ -143,7 +143,7 @@
  * default — every co-open of the same file must derive the same value
  * (corm namespaces records by dbid AND table shape, like the 2B-3
  * fold-plugin truncation bug). The CLI's gen_open, the @roster sidecar,
- * and every bound axis's rec_axis_open (fold/plain/stoma) share this
+ * and every bound axis's rec_axis_open (fold/plain/lemma) share this
  * derivation. Valid = nonzero 2^n-1 (corm_open requires mask+1 buckets). */
 static uint32_t
 corm_mask_effective(void)
@@ -1700,7 +1700,7 @@ corm_axes_setup(void)
 	char sidecar[BUFSIZ + 16];
 
 	/* Per-primary binding (7-AXIS-NAMESPACE-PLAN.md A-2): publish the
-	 * primary path verbatim before any axis binds. A derived axis (stoma)
+	 * primary path verbatim before any axis binds. A derived axis (lemma)
 	 * rebuilds from EXACTLY this primary — the live handle, never a
 	 * directory-guessed roster — so two DBs in one dir can't cross-wire. */
 qsys_setenv("CORM_AXIS_PRIMARY", corm_path, 1);
@@ -2670,7 +2670,7 @@ main(int argc, char *argv[])
 		/* Write-path ref inference note: many fsck/alias helper paths want
 		 * ref from the `-p <n>` / `-d <n>` numeral ("m1" in the docs). That
 		 * has nothing to do with the per-axis candidate-pool knob `m=` in
-		 * query specs (joint/sepal/stoma), which lives in rec_axis_decode
+		 * query specs (joint/sepal/lemma), which lives in rec_axis_decode
 		 * and is clamped to the store size by the axis libraries. */
 		flags &= ~QH_RDONLY;
 	case 'l':

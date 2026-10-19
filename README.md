@@ -19,7 +19,7 @@
 
 - **[libjoint](https://github.com/tty-pt/libit)** (Time Axis): Evaluates temporal presence intervals via `rec_axis_fill_interval`.
 - **[libislet](https://github.com/tty-pt/libgeo)** (Space Axis): Evaluates multi-dimensional spatial bounding boxes via `Point3_2.fill_bbox`.
-- **[libstoma](https://github.com/tty-pt/libstoma)** (Text Axis): Evaluates accent-preserving token matching via `rec_axis_fill_tokens`.
+- **[liblemma](https://github.com/tty-pt/liblemma)** (Text Axis): Evaluates accent-preserving token matching via `rec_axis_fill_tokens`.
 - **[libsepal](https://github.com/tty-pt/libsepal)** (Meaning Axis): Ranks vector candidates via `sepal_fill_approx` and `sepal_rank`.
 
 ---

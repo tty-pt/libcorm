@@ -2,9 +2,9 @@
  * @file cormd.c
  * @brief Resident daemon for libcorm and multi-dimensional search axes.
  *
- * Keeps primary corm database and in-memory search indexes (libstoma, libjoint)
+ * Keeps primary corm database and in-memory search indexes (liblemma, libjoint)
  * resident in memory between requests to eliminate repetitive process startup
- * and stoma index reconstruction.
+ * and lemma index reconstruction.
  */
 
 #include <ttypt/corm.h>
@@ -410,7 +410,7 @@ corm_axes_close(int slot, const char *name)
 			rec_axis_set_ctx(slot, NULL);
 			return;
 		}
-		/* 2. Try <name>_close if plugin exports it (e.g. stoma_close, joint_close, sepal_close) */
+		/* 2. Try <name>_close if plugin exports it (e.g. lemma_close, joint_close, sepal_close) */
 		char cname[128];
 		snprintf(cname, sizeof(cname), "%s_close", name);
 		sym = qsys_dlsym(h, cname);
@@ -560,6 +560,24 @@ corm_write_ref(const char *operand, uint32_t *ref)
 		return 0;
 	memcpy(ref, r, sizeof(*ref));
 	return 1;
+}
+
+static int
+corm_single_axis_store(int slot, uint32_t ref, const void *payload, size_t len, uint32_t qtype)
+{
+	const rec_axis_t *axis = (slot >= 0) ? rec_axis_get(slot) : NULL;
+	struct corm_axis_fx *fx = (slot >= 0 && slot < REC_QUERY_MAX_AXES) ? &corm_axis_fx[slot] : NULL;
+	int rc = 0;
+
+	if (!axis || !axis->ctx || !fx || !fx->bound)
+		return 0;
+	if (qtype != CM_STR && fx->has_typed)
+		rc = fx->typed_fn(axis->ctx, NULL, ref, payload, len, qtype);
+	else if (fx->has_store)
+		rc = fx->store_fn(axis->ctx, NULL, ref, (const char *)payload);
+	else if (fx->has_typed)
+		rc = fx->typed_fn(axis->ctx, NULL, ref, payload, len, qtype);
+	return rc;
 }
 
 static int
@@ -1156,8 +1174,8 @@ reconcile_secondary_indexes(char *err_msg, size_t err_sz)
 			while (corm_next(&k, &v, cur)) {
 				uint32_t ref = *(const uint32_t *)k;
 				if (v) {
-					int nfail = corm_fanout_store(ref, v, strlen((const char *)v), CM_STR);
-					if (nfail > 0) {
+					int rc = corm_single_axis_store(slot, ref, v, strlen((const char *)v), CM_STR);
+					if (rc != 0) {
 						corm_fin(cur);
 						snprintf(err_msg, err_sz, "reconciliation failed: axis '%s' failed to store ref %u",
 							name, ref);
@@ -1587,7 +1605,7 @@ usage(const char *prog)
 	fprintf(stderr,
 		"Usage: %s [options]\n"
 		"Options:\n"
-		"  -d, --db SPEC      Database filespec (default: mem.db@joint,stoma:a:s)\n"
+		"  -d, --db SPEC      Database filespec (default: mem.db@joint,lemma:a:s)\n"
 		"  -s, --socket PATH  Socket path (default: .pi/mm/cormd.sock)\n"
 		"  -l, --lock PATH    Lock file path (default: .cormd.lock beside db)\n"
 		"  -f, --foreground   Run in foreground (default)\n"
@@ -1598,7 +1616,7 @@ usage(const char *prog)
 int
 main(int argc, char *argv[])
 {
-	char db_opt[BUFSIZ] = "mem.db@joint,stoma:a:s";
+	char db_opt[BUFSIZ] = "mem.db@joint,lemma:a:s";
 	char sock_opt[BUFSIZ] = ".pi/mm/cormd.sock";
 	char lock_opt[BUFSIZ] = "";
 

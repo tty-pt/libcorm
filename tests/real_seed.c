@@ -1,7 +1,7 @@
 /* tests/real_seed.c — 2B-2 real-file gate seeder (mm-plan/PHASE-2-CLI.md
  * 2B-2): seeds the SAME refs (1/2/3) into the real axis stores living
  * alongside the primary: joint (leading-date), islet (point lists), sepal
- * (floats-direct by default). stoma is deliberately NOT seeded — the 2B-2
+ * (floats-direct by default). lemma is deliberately NOT seeded — the 2B-2
  * contract rebuilds it from the primary at each open, never from files.
  *
  * Each axis lib is dlopen'd separately and its rec_axis_open/store

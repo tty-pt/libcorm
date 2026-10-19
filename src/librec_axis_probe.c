@@ -78,7 +78,7 @@ probe_decode(const char *s)
 	if (!s)
 		return NULL;
 
-	/* Scoped flags deliver the stoma-style spec "query='value'"; the
+	/* Scoped flags deliver the lemma-style spec "query='value'"; the
 	 * read-only scan unwraps the single query key so whole-string
 	 * semantics see the raw value ("empty"/"boom"/anything). Probe
 	 * declares only `query`, so there is at most one key; a raw value

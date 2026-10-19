@@ -104,12 +104,12 @@ Both implementations agree:
 Combining across rankers (`--score` sum/max/weighted, riding
 `rec_consumer_score` + `rec_axis_score_t[]`) is **deferred**. Pinned
 end-to-end in `test-real.sh` (two rank-capable axes in one `-X`
-expression → first-in-preorder stoma ranks, not sepal cosine) and
+expression → first-in-preorder lemma ranks, not sepal cosine) and
 `test-cli.sh` (`EXCEPT` chains left-to-right).
 
 **D15 (labeled instances):** the same axis may appear more than once as
 `label:axis` leaves. Rank-capable instances of one axis then aggregate as
-the **per-ref MAX score** (order-independent — `(A:stoma OR B:stoma)`
+the **per-ref MAX score** (order-independent — `(A:lemma OR B:lemma)`
 ranks ref N by `max(scoreA, scoreB)`); distinct axes still keep the D2
 first-rankable-in-preorder rule. `--rank=A` (or the scoped `--rank@A`) pins
 the ranker to exactly the labeled instance A, erroring when that instance's
@@ -117,7 +117,7 @@ axis has no `rank` fn.
 
 ## Kernel vs axes
 
-| Owns | The kernel | An axis (libjoint, libislet, stoma, …) |
+| Owns | The kernel | An axis (libjoint, libislet, lemma, …) |
 |---|---|---|
 | Storage | — (no domain data) | its domain store (interval DB, morton index, inverted index) |
 | Candidates | `rec_set_t` (fill/intersect/subtract/union/count) | its filter result, poured into a set via its adapter |
@@ -145,9 +145,9 @@ Rules (the contract):
    matches enters the set once.
 4. **Additive.** Raw axis entry points remain; the adapter is optional.
 5. **The ref is the axis's native id, widened.** libislet stores uint32 cell
-   values and widens them to `rec_ref_t` at fill time; stoma fills the
+   values and widens them to `rec_ref_t` at fill time; lemma fills the
    caller's decimal row ids (`rec_axis_fill_tokens` pushes `strtoull`
-   of the row id, `stoma_rank` reverses it). The kernel never interprets a
+   of the row id, `lemma_rank` reverses it). The kernel never interprets a
    ref; mapping back to a consumer schema is the consumer's job.
 
 ## Streaming vs sets
@@ -174,7 +174,7 @@ final recall by the approximate one — `m` is the visible knob.
 |---|---|---|---|
 | libjoint | interval membership `[a,b)` | optional recency | exact |
 | libislet | bbox membership | optional distance | exact |
-| stoma | lexical token set | FTS score | exact |
+| lemma | lexical token set | FTS score | exact |
 | libsepal (ANN) | **approximate** Hamming top-m | exact cosine | approximate (flag) |
 
 ## Query engine & plugin registry (`rec_query`)
@@ -234,7 +234,7 @@ delimiter — entirely the axis's own business) and returns the ctx pointer
 a consumer then passes to `rec_axis_set_ctx()`. **Persistence is axis-decided
 (D13):** `spec` names the *logical* axis (`<primary-dir>/<primary>-<name>`,
 e.g. `garden.db-joint` for `garden.db`); an
-axis that is derived rebuilds from the primary at each open (e.g. `stoma`,
+axis that is derived rebuilds from the primary at each open (e.g. `lemma`,
 optionally `joint`/`islet`), a persisted one uses the file (`sepal` always).
 Fanout in 2B-4 writes to whatever `ctx` the bound axis represents. The mask
 (`corm_open(...,mask,flags)`, `corm.h:204`) is only an initial hint
@@ -377,7 +377,7 @@ Contract:
   Credentials stay env-only — never CLI flags.
 - The axis merges the CLI state in its own decode (what it omits stays
   omitted); a bare leaf may fall back to CLI state (e.g. bare `sepal` +
-  `--file`), or stay unsearchable (bare `stoma` stays `NULL`). joint's
+  `--file`), or stay unsearchable (bare `lemma` stays `NULL`). joint's
   per-end chain is **leaf `a`/`b` > `--since`/`--until` > `--query` >
   unset**; `--query` accepts a point timestamp (widened to its containing
   calendar day, TZ-safe via `localtime`/`mktime`) or a space-free `A..B`
@@ -390,7 +390,7 @@ Contract:
 #### Worked example — the shape in one command
 
 ```sh
-corm -p "<SOME-DATE>:<SOME STRING>" "demo.db@stoma,sepal,joint:a:s"
+corm -p "<SOME-DATE>:<SOME STRING>" "demo.db@lemma,sepal,joint:a:s"
 ```
 
 Step by step, what this does:
@@ -400,7 +400,7 @@ Step by step, what this does:
    **whole** argument string `<SOME-DATE>:<SOME STRING>` as the value. Nothing
    is split, no key is extracted, nothing is validated against any axis.
 2. **Fan-out.** The CLI passes `(ref, value)` to **each** axis on the roster
-   (`stoma`, `sepal`, `joint`) — the same ref, the **same entire string**,
+   (`lemma`, `sepal`, `joint`) — the same ref, the **same entire string**,
    verbatim. corm has zero per-axis knowledge: it never splits the string,
    never pulls out a date, never decides what a "key" is.
 3. **Each axis parses the whole string itself, in its own grammar** (axis
@@ -410,7 +410,7 @@ Step by step, what this does:
    - **sepal** takes the string's content and generates embeddings for it →
      a semantic vector store rowed by ref → similar to how later ANN queries
      find refs.
-   - **stoma** FTS-indexes the string under the canonical `text` field →
+   - **lemma** FTS-indexes the string under the canonical `text` field →
      lexical/token queries find the ref.
 4. **Query with AND/OR/NOT.** Each axis is queried through its own `--params`
    grammar; results are combined over ref sets, and refs resolve back to the
@@ -440,11 +440,11 @@ same *kind* of inverse the others already happen to keep.
 |---|---|---|
 | libsepal | store keyed **by ref** (`sepal_get`/`sepal_del`; same-ref put is replace-in-place) | adapters only (`unstore` normalizes absent → 0); string values embed-if-configured else `EINVAL` |
 | libjoint | `id` secondary index (id → ti keys, kept by `corm_assoc`, backfilled from the file-backed `ti` map on open) | public `joint_erase` + `rec_axis_store`/`unstore`/`readback` (ordered-attempt whole-string grammar; id-index exact-match guard; read-back = NUL-joined store-grammar intervals); no stored state. **DONE 2A-3 (2026-09-14)** |
-| stoma | doc side-table (`field\trow` → folded text) — re-tokenize → the exact posting keys (also serves phrase verification + rank lengths) | public `stoma_unindex`/`_ref` + `rec_axis_store`/`unstore`/`readback` on the canonical `text` field (read-back = folded doc, one entry); no new state; memory-only (rebuilt from primary strings per open). **DONE 2A-2 (2026-09-14)** |
+| lemma | doc side-table (`field\trow` → folded text) — re-tokenize → the exact posting keys (also serves phrase verification + rank lengths) | public `lemma_unindex`/`_ref` + `rec_axis_store`/`unstore`/`readback` on the canonical `text` field (read-back = folded doc, one entry); no new state; memory-only (rebuilt from primary strings per open). **DONE 2A-2 (2026-09-14)** |
 | libislet | none (cell-keyed, value = ref) | **only structural addition**: `rev` manifest (own single-map `<fname>.ridx`: u32 ref → `;`-joined canonical point string, replace-in-place per ref) + `islet_del_value_N` family (`1..4` + `2_32`); `store` replace-in-place, shared cells legal, `unstore` O(cells-of-ref) |
 
 **Persistence classes:** file-backed (`ti`, grid+`rev`, sepal blobs — reopened
-across invocations) vs memory+rebuild (stoma postings+docs, re-derived from
+across invocations) vs memory+rebuild (lemma postings+docs, re-derived from
 primary strings at each open: zero disk, never stale).
 
 Phase 2A slices, per-axis value grammars, and gates: site repo
@@ -483,7 +483,7 @@ keeping the CLI generic.
 
 `dlopen` happens in the CLI or library user, never in libcorm's own link
 table: `ldd bin/corm` shows only `libcorm` + `libqsys` + libc + libxxhash,
-and a `grep -E 'stoma|libjoint|libislet|libsepal'` across libcorm source
+and a `grep -E 'lemma|libjoint|libislet|libsepal'` across libcorm source
 and headers returns zero matches.
 
 ## Status
@@ -501,14 +501,14 @@ and headers returns zero matches.
   `test_extended` passes, new `joint_axis_store_test` 116/116; `nm -D`
   shows all four symbols; zero warnings; zero new stored state; read-back
   is the ref's intervals NUL-joined in the store grammar).
-- stoma adapter `rec_axis_fill_tokens` + ranker `stoma_rank`: implemented
-  (in-site submodule `external/libstoma`).
-- stoma Phase 2A store half (`stoma_unindex`/`stoma_unindex_ref` +
+- lemma adapter `rec_axis_fill_tokens` + ranker `lemma_rank`: implemented
+  (in-site submodule `external/liblemma`).
+- lemma Phase 2A store half (`lemma_unindex`/`lemma_unindex_ref` +
   `rec_axis_store`/`unstore`/`readback` on the canonical `text` field):
-  implemented (in-site submodule `external/libstoma`, **DONE 2A-2 2026-09-14** —
-  `make test` green: `stoma_test` 227/227 incl. the index→unindex zero-
-  residual differential, `stoma_prop_test` seeds pass, new
-  `stoma_axis_store_test` 34/34 valgrind-clean; `nm -D` shows all five
+  implemented (in-site submodule `external/liblemma`, **DONE 2A-2 2026-09-14** —
+  `make test` green: `lemma_test` 227/227 incl. the index→unindex zero-
+  residual differential, `lemma_prop_test` seeds pass, new
+  `lemma_axis_store_test` 34/34 valgrind-clean; `nm -D` shows all five
   symbols; memory-only, zero new stored state; read-back returns the
   folded text).
 - libislet Phase 2A store half (`rev` + `islet_del_value_1..4`/`_2_32` +
@@ -559,7 +559,7 @@ and headers returns zero matches.
 | libjoint | `spec` = `joint_init()` filename (empty/NULL → in-memory) | `jd` (unsigned handle, widened via `uintptr_t`) | either (file or derived rebuild; D13) |
 | libislet | `spec` = `"filename:database:mask"` (`:`-separated, any field empty → `islet_open()`'s NULL/0 default) | `uint32_t` db handle (widened via `uintptr_t`) | either (file+`.ridx` or derived; D13) |
 | libsepal | `spec` = `sepal_open()` fname (empty/NULL → memory-only store) | `sepal_vecstore_t *` (direct pointer) | file-backed |
-| stoma | `spec` = decimal `stoma_open()` mask **or** `<dir>/<primary>-stoma` path (per-primary rebuild — `CORM_AXIS_PRIMARY` first, else the single-roster scan; 2B-2) | `stoma_db_t *` (direct pointer) | derived (memory+rebuild) |
+| lemma | `spec` = decimal `lemma_open()` mask **or** `<dir>/<primary>-lemma` path (per-primary rebuild — `CORM_AXIS_PRIMARY` first, else the single-roster scan; 2B-2) | `lemma_db_t *` (direct pointer) | derived (memory+rebuild) |
 
 ## Verification
 
@@ -573,10 +573,10 @@ and headers returns zero matches.
 - libislet: `test_geo_fill.c`, `test_fill_parity.c` (fill == raw collect),
   `test_fill_props.c` (brute-force oracle), `bench_rec_fill.c`,
   `bench_sparse.c`.
-- stoma: `stoma_test.c` groups 30-35 (fill==query equivalence both phrase
+- lemma: `lemma_test.c` groups 30-35 (fill==query equivalence both phrase
   modes, seal/additivity, arg validation + non-decimal strictness, rank
-  numbers, kernel join/rank integration), `stoma_prop_test.c` (fixed-LCG
-  differential: fill set == reference == stoma_query for every query, plus
+  numbers, kernel join/rank integration), `lemma_prop_test.c` (fixed-LCG
+  differential: fill set == reference == lemma_query for every query, plus
   exact rank-score spot-checks).
 - libsepal: 8 unit tiers (blob/cosine/sketch/matryoshka/vecstore/search/
   fill/rank — search/fill validated against an exact float-cosine

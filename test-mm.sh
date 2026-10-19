@@ -2,15 +2,15 @@
 # test-mm.sh — 2B-5 mm-dialect gate (mm-plan/2B-5-IMPLEMENTATION.md).
 #
 # The documented pi-mm recipes (store → composed search → forget → reset)
-# against REAL joint+stoma files. Payload shape is <DATE>:<TEXT> (explicit
+# against REAL joint+lemma files. Payload shape is <DATE>:<TEXT> (explicit
 # refs — auto-ref ingest cannot carry colon payloads, F1); the time leaf is
 # always a bounded window (joint="a=A b=B", F2); -d needs the roster-backed
-# file (F3); stoma stays derived (rebuilt from the primary at each open,
+# file (F3); lemma stays derived (rebuilt from the primary at each open,
 # D13); reset is the documented enumerate+forget loop (F5).
 #
-# Requires the real joint+stoma .so's; resolved from $CORM_AXIS_REAL_LIBS
+# Requires the real joint+lemma .so's; resolved from $CORM_AXIS_REAL_LIBS
 # (colon list, default = the in-site submodule builds under
-# external/lib{joint,stoma}/lib, relative to this script).
+# external/lib{joint,lemma}/lib, relative to this script).
 # Fresh local builds only (D4) — nothing installed.
 
 td=$(mktemp -d)
@@ -50,7 +50,7 @@ assert_ok() {
 # Same pattern as test-real.sh: in-site submodule builds relative to this
 # script (explicit $CORM_AXIS_REAL_LIBS still overrides).
 script_dir=$(dirname "$0")
-real_libs=${CORM_AXIS_REAL_LIBS:-$script_dir/../libjoint/lib:$script_dir/../libstoma/lib}
+real_libs=${CORM_AXIS_REAL_LIBS:-$script_dir/../libjoint/lib:$script_dir/../liblemma/lib}
 axis_path=""
 oIFS=$IFS
 IFS=:
@@ -62,9 +62,9 @@ IFS=$oIFS
 export CORM_AXIS_PATH=$axis_path
 export LD_LIBRARY_PATH=$axis_path:$LD_LIBRARY_PATH
 
-echo "=== preflight: real joint+stoma .so ==="
+echo "=== preflight: real joint+lemma .so ==="
 missing=0
-for a in joint stoma; do
+for a in joint lemma; do
 	found=0
 	oIFS2=$IFS
 	IFS=:
@@ -99,18 +99,18 @@ out=$("$corm" -g . "$td/j.db:a:s" 2>/dev/null)
 assert_eq "joint-forget-persisted" "1" "$out"
 
 echo "=== F4a: roster pre-exists, then seed → refs must persist ==="
-"$corm" --list-axes "$td/m.db@joint,stoma:a:s" >/dev/null 2>&1
+"$corm" --list-axes "$td/m.db@joint,lemma:a:s" >/dev/null 2>&1
 "$corm" -p 1:"2026-09-13:Beacon Harbor lights" \
         -p 2:"2026-09-14:alpha omega" \
         -p 3:"2026-09-15:beacon beacon harbor" \
-        "$td/m.db@joint,stoma:a:s" >/dev/null 2>&1
+        "$td/m.db@joint,lemma:a:s" >/dev/null 2>&1
 out=$("$corm" -g . "$td/m.db:a:s" 2>/dev/null)
 assert_eq "seed-persisted" "1
 2
 3" "$out"
 
-echo "=== composed search (joint window AND stoma) ==="
-expr='(joint AND stoma)'
+echo "=== composed search (joint window AND lemma) ==="
+expr='(joint AND lemma)'
 out=$("$corm" -X "$expr" -g . --since=2026-09-14 --until=2026-09-16 \
 	--query=beacon --field=text --matched=1 "$td/m.db:a:s" -t 10 2>/dev/null)
 assert_eq "composed-and" "1 0.166667 2026-09-13:Beacon Harbor lights
@@ -126,16 +126,16 @@ echo "=== pure-filter joint-only search (no score columns) ==="
 out=$("$corm" -X 'joint' -g . --since=0 --until=2026-09-14 "$td/m.db:a:s" 2>/dev/null)
 assert_eq "joint-before" "1 2026-09-13:Beacon Harbor lights" "$out"
 
-echo "=== F4b: forget with joint+stoma roster → gone from all three ==="
-"$corm" -d 3 "$td/m.db@joint,stoma:a:s" >/dev/null 2>&1
+echo "=== F4b: forget with joint+lemma roster → gone from all three ==="
+"$corm" -d 3 "$td/m.db@joint,lemma:a:s" >/dev/null 2>&1
 assert_ok "forget-exit" "0" "$?"
-"$corm" -d 3 "$td/m.db@joint,stoma:a:s" >/dev/null 2>&1
+"$corm" -d 3 "$td/m.db@joint,lemma:a:s" >/dev/null 2>&1
 assert_ok "forget-idempotent" "0" "$?"
 out=$("$corm" -g . "$td/m.db:a:s" 2>/dev/null)
 assert_eq "forget-primary" "1
 2" "$out"
-out=$("$corm" -X 'stoma' -g . --query=beacon --field=text --matched=1 "$td/m.db:a:s" 2>/dev/null)
-assert_eq "forget-stoma" "1 0.166667 2026-09-13:Beacon Harbor lights" "$out"
+out=$("$corm" -X 'lemma' -g . --query=beacon --field=text --matched=1 "$td/m.db:a:s" 2>/dev/null)
+assert_eq "forget-lemma" "1 0.166667 2026-09-13:Beacon Harbor lights" "$out"
 out=$("$corm" -X 'joint' -g . --since=2026-09-15 --until=2026-09-16 "$td/m.db:a:s" 2>/dev/null)
 # Presence semantics (F2): refs 1/2 own open [date,inf) intervals that still
 # overlap the window; only the forgotten ref 3 must be gone.
@@ -146,20 +146,20 @@ echo "=== reset: documented enumerate+forget loop ==="
 "$corm" -p 1:"2026-09-13:Beacon Harbor lights" \
         -p 2:"2026-09-14:alpha omega" \
         -p 3:"2026-09-15:beacon beacon harbor" \
-        "$td/r.db@joint,stoma:a:s" >/dev/null 2>&1
+        "$td/r.db@joint,lemma:a:s" >/dev/null 2>&1
 for ref in $("$corm" -g . "$td/r.db:a:s" 2>/dev/null | grep -E '^[0-9]+$'); do
-	"$corm" -d "$ref" "$td/r.db@joint,stoma:a:s" >/dev/null 2>&1
+	"$corm" -d "$ref" "$td/r.db@joint,lemma:a:s" >/dev/null 2>&1
 done
 assert_ok "reset-exit" "0" "$?"
 out=$("$corm" -g . "$td/r.db:a:s" 2>/dev/null)
 assert_eq "reset-empty" "-1" "$out"
-out=$("$corm" -X 'stoma' -g . --query=beacon --field=text --matched=1 "$td/r.db:a:s" 2>/dev/null)
-assert_eq "reset-stoma-empty" "" "$out"
+out=$("$corm" -X 'lemma' -g . --query=beacon --field=text --matched=1 "$td/r.db:a:s" 2>/dev/null)
+assert_eq "reset-lemma-empty" "" "$out"
 out=$("$corm" -X 'joint' -g . --since=0 --until=2026-10-01 "$td/r.db:a:s" 2>/dev/null)
 assert_eq "reset-joint-empty" "" "$out"
 echo "=== reset is idempotent ==="
 for ref in $("$corm" -g . "$td/r.db:a:s" 2>/dev/null | grep -E '^[0-9]+$'); do
-	"$corm" -d "$ref" "$td/r.db@joint,stoma:a:s" >/dev/null 2>&1
+	"$corm" -d "$ref" "$td/r.db@joint,lemma:a:s" >/dev/null 2>&1
 done
 assert_ok "reset-again" "0" "$?"
 out=$("$corm" -g . "$td/r.db:a:s" 2>/dev/null)
