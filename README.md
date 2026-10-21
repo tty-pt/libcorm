@@ -14,6 +14,17 @@
 
 ---
 
+## The 50-Microsecond Multidimensional Search Story
+
+Imagine you are building a virtual world, game, or search engine. A user asks:
+> *"Show me all enemies within 30 meters who were active in the last 5 minutes and have 'fire' in their name."*
+
+In traditional architectures, you would query three separate databases (spatial, time-series, text) and write slow glue code to merge them in application memory.
+
+In `libcorm`, the Space engine ([libislet](https://github.com/tty-pt/libislet)), Time engine ([libjoint](https://github.com/tty-pt/libjoint)), and Text engine ([liblemma](https://github.com/tty-pt/liblemma)) each stream 32-bit entity IDs into an in-memory candidate pool. `libcorm` intersects them in CPU cache lines in **50 microseconds**. No SQL parser, no disk latency, and zero malloc calls in the query loop.
+
+---
+
 ## The Unified Recall Kernel (`<ttypt/cormr.h>`)
 
 `libcorm` hosts the domain-free Recall Kernel, standardizing multi-dimensional retrieval into a high-throughput `"filter by axis → join → rank"` pipeline over uniform 32-bit references (`cormr_ref_t`). Queries compose seamlessly across four independent domain axes:
