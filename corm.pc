@@ -5,6 +5,6 @@ includedir=${prefix}/include
 
 Name: cormlib
 Description: Simple hashtable library
-Version: 2.0.0
+Version: 2.0.1
 Libs: -L${libdir} -lcorm -lxxhash
 Cflags: -I${includedir}/cormlib

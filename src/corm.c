@@ -177,7 +177,14 @@ enum corme_mbr {
 };
 
 corme_meta_t metas[CM_MAX];
-corme_type_t types[8];
+corme_type_t types[16];
+
+static void b_print(const void *data) {
+	if (!data) return;
+	uint32_t len = *(const uint32_t *)data;
+	const char *payload = (const char *)data + sizeof(uint32_t);
+	fwrite(payload, 1, len, stdout);
+}
 
 uint32_t QH_NOT_NEW = 0x200;  /* CLI flag - high bit to avoid QM library flag overlap */
 
@@ -725,7 +732,7 @@ static inline int gen_cond(int is_value) {
 		type = corme_type(aux_hd, KEY, rev);
 	}
 
-	return type == CM_STR;
+	return type == CM_STR || type == corm_blob_type();
 }
 
 inline static const void *
@@ -1016,6 +1023,66 @@ static inline int gen_put(void) {
 	gen_lookup(optarg);
 
 	key = col ? key_ptr : NULL;
+	uint32_t vtype = metas[prim_hd].types[1];
+
+	if (vtype && vtype == corm_blob_type()) {
+		size_t vlen;
+		char *buf;
+		if (strcmp((const char *)value_ptr, "-") == 0) {
+			/* Read binary payload from stdin */
+			size_t cap = 4096;
+			size_t nread = 0;
+			char *sbuf = malloc(sizeof(uint32_t) + cap);
+			if (!sbuf) return EXIT_FAILURE;
+			while (1) {
+				size_t r = fread(sbuf + sizeof(uint32_t) + nread, 1, cap - nread, stdin);
+				if (r == 0) break;
+				nread += r;
+				if (nread == cap) {
+					cap *= 2;
+					char *nb = realloc(sbuf, sizeof(uint32_t) + cap);
+					if (!nb) { free(sbuf); return EXIT_FAILURE; }
+					sbuf = nb;
+				}
+			}
+			vlen = nread;
+			*(uint32_t *)sbuf = (uint32_t)vlen;
+			buf = sbuf;
+			value_ptr = buf + sizeof(uint32_t);
+		} else {
+			vlen = strlen((const char *)value_ptr);
+			size_t total_sz = sizeof(uint32_t) + vlen;
+			buf = malloc(total_sz);
+			if (!buf)
+				return EXIT_FAILURE;
+			*(uint32_t *)buf = (uint32_t)vlen;
+			memcpy(buf + sizeof(uint32_t), value_ptr, vlen);
+		}
+
+		id = corm_put(prim_hd, key, buf);
+		corme_print(prim_hd, KEY,
+				key ? key : (char *) &id);
+		putchar('\n');
+
+		if (roster_n > 0) {
+			if (metas[prim_hd].types[0] != CM_HNDL) {
+				fprintf(stderr,
+					"corm: axis fan-out needs an :a:-type primary "
+					"(refs must exist); primary written, axes "
+					"skipped\n");
+				free(buf);
+				return EXIT_FAILURE;
+			}
+			uint32_t ref = key ? *(const uint32_t *)key : id;
+			if (corm_fanout_store(ref, value_ptr, vlen, vtype) != 0) {
+				free(buf);
+				return EXIT_FAILURE;
+			}
+		}
+		free(buf);
+		return EXIT_SUCCESS;
+	}
+
 	id = corm_put(prim_hd, key, value_ptr);
 	corme_print(prim_hd, KEY,
 			key ? key : (char *) &id);
@@ -1083,6 +1150,8 @@ uint32_t _corme_type(char *which) {
 		return CM_STR;
 	if (*which == 'u')
 		return CM_U32;
+	if (*which == 'b')
+		return corm_blob_type();
 	fprintf(stderr, "Invalid type specifier: %s\n", which);
 	exit(EXIT_FAILURE);
 }
@@ -1214,6 +1283,9 @@ static struct corm_loaded {
 } corm_loaded_slots[REC_QUERY_MAX_AXES];
 static int corm_loaded_n;
 
+static void *corm_axes_handle_for_slot(int slot);
+static int corm_axes_find_slot(const char *name);
+
 static void
 corm_axes_dlopen_record(const char *path, int quiet)
 {
@@ -1228,12 +1300,25 @@ corm_axes_dlopen_record(const char *path, int quiet)
 		return;
 	}
 	int after = rec_axis_count();
-	if (after == before)
-		return;
-	if (corm_loaded_n >= REC_QUERY_MAX_AXES)
-		return;
-	corm_loaded_slots[corm_loaded_n++] =
-			(struct corm_loaded){ h, before, after - 1 };
+	if (after > before) {
+		if (corm_loaded_n < REC_QUERY_MAX_AXES)
+			corm_loaded_slots[corm_loaded_n++] =
+					(struct corm_loaded){ h, before, after - 1 };
+	} else {
+		const char *slash = strrchr(path, '/');
+		const char *base = slash ? slash + 1 : path;
+		if (!strncmp(base, "lib", 3))
+			base += 3;
+		char ax_name[CORM_AXIS_ROSTER_MAX];
+		snprintf(ax_name, sizeof(ax_name), "%s", base);
+		char *dot = strstr(ax_name, ".so");
+		if (dot)
+			*dot = '\0';
+		int s = corm_axes_find_slot(ax_name);
+		if (s >= 0 && !corm_axes_handle_for_slot(s) && corm_loaded_n < REC_QUERY_MAX_AXES) {
+			corm_loaded_slots[corm_loaded_n++] = (struct corm_loaded){ h, s, s };
+		}
+	}
 }
 
 static int
@@ -1262,9 +1347,12 @@ static int
 corm_axes_find_lib(const char *name, char *out, size_t cap)
 {
 	const char *path_env = getenv("CORM_AXIS_PATH");
+	const char *home = getenv("HOME");
 	char dirs[BUFSIZ];
 	if (path_env && *path_env)
 		snprintf(dirs, sizeof(dirs), "%s", path_env);
+	else if (home && *home)
+		snprintf(dirs, sizeof(dirs), "%s/.local/lib:/usr/local/lib:/usr/lib", home);
 	else
 		snprintf(dirs, sizeof(dirs), "/usr/lib");
 
@@ -1335,7 +1423,24 @@ corm_axes_sym(void *h, const char *sym_cormr, const char *sym_rec, void *fn, siz
 static void
 corm_axes_bind(int slot, const char *name)
 {
-	void *h = corm_axes_handle_for_slot(slot);
+	void *h = NULL;
+	char path[BUFSIZ];
+	if (corm_axes_find_lib(name, path, sizeof(path))) {
+		h = qsys_dlopen(path, 0);
+	}
+	if (!h)
+		h = corm_axes_handle_for_slot(slot);
+
+	if (h && slot >= 0) {
+		int recorded = 0;
+		for (int i = 0; i < corm_loaded_n; i++) {
+			if (corm_loaded_slots[i].h == h) { recorded = 1; break; }
+		}
+		if (!recorded && corm_loaded_n < REC_QUERY_MAX_AXES) {
+			corm_loaded_slots[corm_loaded_n++] = (struct corm_loaded){ h, slot, slot };
+		}
+	}
+
 	char spec[BUFSIZ];
 	corm_axes_spec(name, spec, sizeof(spec));
 
@@ -1712,6 +1817,7 @@ corm_axes_setup(void)
 	 * rebuilds from EXACTLY this primary — the live handle, never a
 	 * directory-guessed roster — so two DBs in one dir can't cross-wire. */
 qsys_setenv("CORM_AXIS_PRIMARY", corm_path, 1);
+qsys_setenv("CORM_AXIS_VTYPE", (metas[prim_hd].types[1] == corm_blob_type()) ? "b" : "s", 1);
 
 	snprintf(sidecar, sizeof(sidecar), "%s.roster", corm_path);
 	struct stat st;
@@ -2604,6 +2710,9 @@ main(int argc, char *argv[])
 	types[CM_HNDL].print = u_print;
 	types[CM_STR].print = s_print;
 	types[CM_U32].print = u_print;
+	uint32_t bt = corm_blob_type();
+	if (bt < 16)
+		types[bt].print = b_print;
 
 	aqs[AQ_A].hd = corm_open(NULL, NULL,
 			CM_HNDL, CM_HNDL,

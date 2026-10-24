@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 /* libcorm.c
  * Licence: BSD-2-Clause
  *
@@ -17,6 +18,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <errno.h>
 
 /* MACROS, STRUCTS, ENUMS AND GLOBALS {{{ */
 
@@ -936,8 +938,9 @@ corm_open(const char *filename,
     file.fd = -1;
     ids_push(&file.ids, hd);
     corm_put(corm_files_hd, filename, &file);
-  } else
+  } else {
     ids_push((ids_t *) &file_p->ids, hd);
+  }
 
 file_skip:
   if (filename)
@@ -989,11 +992,11 @@ s_measure(const void *key)
 }
 
 static void file_close(corm_file_t *file) {
-  if (file->mmaped) {
-    CBUG(munmap(file->mmaped, file->size) == -1,
-        "munmap failed");
+  if (file->mmaped && file->size > 0) {
+    CBUG(munmap(file->mmaped, file->size) == -1, "munmap failed");
     file->mmaped = 0;
   }
+  file->size = 0;
 
   if (file->fd >= 0)
     close(file->fd);
@@ -1004,20 +1007,21 @@ __attribute__((destructor))
   static void corm_destruct(void) {
     corm_save();
 
-    for (uint32_t i = idm.last; i-- > 0; )
-      corm_close(i);
-
-    idm_drop(&cursor_idm);
-    idm_drop(&idm);
-
     uint32_t cur = corm_iter(corm_files_hd, NULL, 0);
     const void *key, *value;
-
     while (corm_next(&key, &value, cur))
       file_close((corm_file_t *) value);
 
+    for (uint32_t i = idm.last; i-- > 0; ) {
+      if (i != corm_files_hd && i != corm_dbs_hd)
+        corm_close(i);
+    }
+
     corm_close(corm_dbs_hd);
     corm_close(corm_files_hd);
+
+    idm_drop(&cursor_idm);
+    idm_drop(&idm);
   }
 
 __attribute__((constructor))
@@ -1439,6 +1443,9 @@ _corm_put(uint32_t hd, const void * key,
 corm_put(uint32_t hd, const void * const key,
     const void * const value)
 {
+  if (!key && (hd == corm_files_hd || hd == corm_dbs_hd)) {
+    return CM_MISS;
+  }
   uint32_t ahd, n, id;
   idsi_t *cur;
   const void *rkey, *rval;
@@ -2472,6 +2479,21 @@ corm_len(uint32_t type_id, const void *key)
     : type->len;
 }
 
+size_t corm_blob_measure(const void *data)
+{
+  if (!data) return 0;
+  return sizeof(uint32_t) + (size_t)(*(const uint32_t *)data);
+}
+
+static uint32_t g_corm_blob_type = 0;
+uint32_t corm_blob_type(void)
+{
+  if (!g_corm_blob_type) {
+    g_corm_blob_type = corm_mreg(corm_blob_measure);
+  }
+  return g_corm_blob_type;
+}
+
 /* }}} */
 
 /* RECORD-AWARE MAP SUPPORT {{{ */
@@ -2752,6 +2774,9 @@ corm_load_file(char *filename, uint32_t dbid, uint32_t hd)
 {
   corm_file_t *file = (corm_file_t *)
     corm_get(corm_files_hd, filename);
+
+  if (!file)
+    return;
 
   struct stat sb;
   char *mm;

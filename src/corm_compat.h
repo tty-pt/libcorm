@@ -59,4 +59,40 @@
 #define corm_ignore_pipe() qsys_ignore_pipe()
 #define corm_self_rss_bytes() qsys_self_rss_bytes()
 
+#ifdef __wasm__
+/* ── WebAssembly / WASI linear memory arena shims ────────────────────── */
+
+#ifndef MAP_SHARED
+#define MAP_SHARED 1
+#endif
+#ifndef MAP_PRIVATE
+#define MAP_PRIVATE 2
+#endif
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS 4
+#endif
+#ifndef PROT_READ
+#define PROT_READ 1
+#endif
+#ifndef PROT_WRITE
+#define PROT_WRITE 2
+#endif
+
+/* Host snapshot persistence bridges (IndexedDB or Web Worker OPFS) */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+__attribute__((import_module("corm"), import_name("corm_host_persist")))
+void corm_host_persist(const char *name, const void *ptr, size_t size);
+
+__attribute__((import_module("corm"), import_name("corm_host_restore")))
+size_t corm_host_restore(const char *name, void *ptr, size_t max_size);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __wasm__ */
+
 #endif /* CORM_COMPAT_H */
