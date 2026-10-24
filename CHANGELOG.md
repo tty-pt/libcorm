@@ -1,4 +1,18 @@
-## 2.0.0
+## [2.0.1]
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tty-pt/libcorm/main/assets/logo.png" alt="libcorm logo" width="220" />
+</p>
+
+- **WASM Linear Memory Arena Shims & Host Persistence (`src/corm.c`, `src/corm_compat.h`)**:
+  - Added linear memory arena allocator and host persistence imports for executing Corm databases inside WebAssembly browser runtimes.
+  - Standardized memory alignment and fallback hooks for headless/WASM targets.
+- **`cormd` Resident Daemon Multi-Instance Resiliency**:
+  - Enhanced socket lifecycle and signal handling to ensure uninterrupted resident database performance across repeated test cycles and multi-tenant instances.
+- **Linker Purity & DT_RUNPATH Elimination**:
+  - Stripped hardcoded `/home/` and `-Wl,-rpath` flags from Makefiles, linking cleanly against system authority (`/usr/lib`).
+
+## [2.0.0]
 
 - **Recall Kernel Overhaul & `rec.h` Elimination**:
   - Replaced legacy `rec.h` with `<ttypt/cormr.h>` and unified umbrella inclusion in `<ttypt/corm.h>`.
@@ -21,7 +35,7 @@
   - `corm_del_value()`: deletes specific matching value from a duplicate chain.
   - Cursor release idempotency fix in `corm_fin()`.
 
-## 1.5.0
+## [1.5.0]
 
 Three new public primitives, plus a real fix to cursor teardown. All three copy-or-delete helpers exist to remove hand-rolled boilerplate at `corm_get()` / `corm_next()` call sites, where each call site had to re-derive the destination size — and where the size was routinely derived wrongly (see the measured-type trap below).
 
@@ -36,7 +50,7 @@ Three new public primitives, plus a real fix to cursor teardown. All three copy-
 
 ---
 
-## 1.4.1
+## [1.4.1]
 
 - **Multi-db file load dropped databases — and the exit-save then made it permanent** (`corm_load_file` / `_corm_load`): loading walked the mapping by *counting the file's registered handles*, one `_corm_load` per id, each using the **iterated** handle as the load target. That only pairs correctly when the id list's order matches the on-disk block order, which it does not (blocks are emitted in `ids_iter` order, handles are registered as they are opened). Any database whose block the walk failed to reach came back as an **empty map** — and since `corm_save()` runs at process exit, a reader re-wrote the file from the emptiness, permanently truncating the block it had missed. Repro on the pre-1.4.1 library: a 3-db file opened 2 of 3 dbs empty; a 2-db file opened one empty and shrank 52 → 42 bytes on read. This is the "silently dropped" class that 1.4.0's F4 entry hit on the libstoma sidecar. `corm_load_file` now takes the requesting `hd` from `corm_open` and walks the mapping by each block's on-disk `size` prefix, so any block whose `lid` matches is loaded into the handle that asked for it, whatever order the file is in.
 - **Off-by-8 block skip** (`_corm_load`): the dbid-mismatch branch returned `mm + size - mm_start` *after* `mm` had already advanced past the 8-byte `[dbid][size]` block header, so the walk drifted 8 bytes too far per skipped block and read the next block's `lid`/`size` from mid-payload bytes. The resulting garbage length can walk past the end of the mapping (one 3-db repro segfaulted here). The skip now honors the on-disk `size` exactly.
@@ -47,7 +61,7 @@ Three new public primitives, plus a real fix to cursor teardown. All three copy-
 
 ---
 
-## 1.4.0
+## [1.4.0]
 
 - **Renamed `libqmap` → `libcorm`**: the `qmap_*` API and headers are now `corm_*` (`include/ttypt/corm.h`, `qmap.pc` → `corm.pc`); the full test/example suite was migrated to the new name.
 - **The Recall Kernel** (`include/ttypt/rec.h`, `src/rec.c`) — a domain-free "filter by axis → join → rank" loop over uniform 32-bit refs:

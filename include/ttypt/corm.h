@@ -784,6 +784,13 @@ void corm_cmp_set(uint32_t ref,
 uint32_t corm_mreg(corm_measure_t *measure);
 
 /**
+ * @brief Canonical measured type for length-prefixed binary blobs (uint32_t len + data).
+ * @return Type ID for use as vtype in corm_open.
+ */
+uint32_t corm_blob_type(void);
+size_t corm_blob_measure(const void *data);
+
+/**
  * @brief Get the byte length of an element.
  *
  * @param[in] type_id Type ID.

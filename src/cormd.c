@@ -180,6 +180,8 @@ _corme_type(const char *which)
 		return CM_STR;
 	if (*which == 'u')
 		return CM_U32;
+	if (*which == 'b')
+		return corm_blob_type();
 	return CM_STR;
 }
 
@@ -291,6 +293,9 @@ corm_axes_spec(const char *name, char *out, size_t cap)
 			dirname(dirbuf), sl ? sl + 1 : basebuf, name);
 }
 
+static void *corm_axes_handle_for_slot(int slot);
+static int corm_axes_find_slot(const char *name);
+
 static void
 corm_axes_dlopen_record(const char *path, int quiet)
 {
@@ -304,25 +309,44 @@ corm_axes_dlopen_record(const char *path, int quiet)
 		return;
 	}
 	int after = rec_axis_count();
-	if (after == before)
-		return;
-	if (corm_loaded_n >= REC_QUERY_MAX_AXES)
-		return;
-	corm_loaded_slots[corm_loaded_n++] = (struct corm_loaded){ h, before, after - 1 };
+	if (after > before) {
+		if (corm_loaded_n < REC_QUERY_MAX_AXES)
+			corm_loaded_slots[corm_loaded_n++] = (struct corm_loaded){ h, before, after - 1 };
+	} else {
+		const char *slash = strrchr(path, '/');
+		const char *base = slash ? slash + 1 : path;
+		if (!strncmp(base, "lib", 3))
+			base += 3;
+		char ax_name[CORM_AXIS_ROSTER_MAX];
+		snprintf(ax_name, sizeof(ax_name), "%s", base);
+		char *dot = strstr(ax_name, ".so");
+		if (dot)
+			*dot = '\0';
+		int s = corm_axes_find_slot(ax_name);
+		if (s >= 0 && !corm_axes_handle_for_slot(s) && corm_loaded_n < REC_QUERY_MAX_AXES) {
+			corm_loaded_slots[corm_loaded_n++] = (struct corm_loaded){ h, s, s };
+		}
+	}
 
 	/* Cache plugin option functions */
 	if (loaded_plugs_n < CORM_CLI_PLUGIN_CAP) {
 		void *osym = qsys_dlsym(h, "rec_axis_cli_options");
 		void *csym = qsys_dlsym(h, "rec_axis_config_arg");
 		if (osym && csym) {
-			const rec_axis_cli_option_t *(*opts_fn)(void);
-			int (*cfg_fn)(const char *, const char *);
-			memcpy(&opts_fn, &osym, sizeof(opts_fn));
-			memcpy(&cfg_fn, &csym, sizeof(cfg_fn));
-			loaded_plugs[loaded_plugs_n].h = h;
-			loaded_plugs[loaded_plugs_n].opts = opts_fn();
-			loaded_plugs[loaded_plugs_n].cfg = cfg_fn;
-			loaded_plugs_n++;
+			int exists = 0;
+			for (int p = 0; p < loaded_plugs_n; p++) {
+				if (loaded_plugs[p].h == h) { exists = 1; break; }
+			}
+			if (!exists) {
+				const rec_axis_cli_option_t *(*opts_fn)(void);
+				int (*cfg_fn)(const char *, const char *);
+				memcpy(&opts_fn, &osym, sizeof(opts_fn));
+				memcpy(&cfg_fn, &csym, sizeof(cfg_fn));
+				loaded_plugs[loaded_plugs_n].h = h;
+				loaded_plugs[loaded_plugs_n].opts = opts_fn();
+				loaded_plugs[loaded_plugs_n].cfg = cfg_fn;
+				loaded_plugs_n++;
+			}
 		}
 	}
 }
@@ -353,9 +377,12 @@ static int
 corm_axes_find_lib(const char *name, char *out, size_t cap)
 {
 	const char *path_env = getenv("CORM_AXIS_PATH");
+	const char *home = getenv("HOME");
 	char dirs[BUFSIZ];
 	if (path_env && *path_env)
 		snprintf(dirs, sizeof(dirs), "%s", path_env);
+	else if (home && *home)
+		snprintf(dirs, sizeof(dirs), "%s/.local/lib:/usr/local/lib:/usr/lib:./lib:../lib", home);
 	else
 		snprintf(dirs, sizeof(dirs), "/usr/lib:/usr/local/lib:./lib:../lib");
 
@@ -429,7 +456,14 @@ corm_axes_close(int slot, const char *name)
 static int
 corm_axes_bind(int slot, const char *name)
 {
-	void *h = corm_axes_handle_for_slot(slot);
+	void *h = NULL;
+	char path[BUFSIZ];
+	if (corm_axes_find_lib(name, path, sizeof(path))) {
+		h = qsys_dlopen(path, 0);
+	}
+	if (!h)
+		h = corm_axes_handle_for_slot(slot);
+
 	char spec[BUFSIZ];
 	corm_axes_spec(name, spec, sizeof(spec));
 
@@ -472,6 +506,27 @@ corm_axes_bind(int slot, const char *name)
 		corm_axes_sym(h, "rec_axis_readback", &fx->readback_fn, sizeof(fx->readback_fn), &fx->has_readback);
 		fx->bound = 1;
 	}
+
+	if (loaded_plugs_n < CORM_CLI_PLUGIN_CAP) {
+		void *osym = qsys_dlsym(h, "rec_axis_cli_options");
+		void *cfg_sym = qsys_dlsym(h, "rec_axis_config_arg");
+		if (osym && cfg_sym) {
+			int exists = 0;
+			for (int p = 0; p < loaded_plugs_n; p++) {
+				if (loaded_plugs[p].h == h) { exists = 1; break; }
+			}
+			if (!exists) {
+				const rec_axis_cli_option_t *(*opts_fn)(void);
+				int (*cfg_fn)(const char *, const char *);
+				memcpy(&opts_fn, &osym, sizeof(opts_fn));
+				memcpy(&cfg_fn, &cfg_sym, sizeof(cfg_fn));
+				loaded_plugs[loaded_plugs_n].h = h;
+				loaded_plugs[loaded_plugs_n].opts = opts_fn();
+				loaded_plugs[loaded_plugs_n].cfg = cfg_fn;
+				loaded_plugs_n++;
+			}
+		}
+	}
 	return 0;
 }
 
@@ -497,6 +552,7 @@ corm_axes_setup(void)
 {
 	char sidecar[BUFSIZ + 16];
 	qsys_setenv("CORM_AXIS_PRIMARY", corm_path, 1);
+	qsys_setenv("CORM_AXIS_VTYPE", (metas[prim_hd].types[1] == corm_blob_type()) ? "b" : "s", 1);
 
 	snprintf(sidecar, sizeof(sidecar), "%s.roster", corm_path);
 	struct stat st;
@@ -1272,6 +1328,12 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 			respond_ok(c, req_id, "-1\n", 3);
 			return;
 		}
+		if (metas[prim_hd].types[1] == corm_blob_type()) {
+			uint32_t blen = *(const uint32_t *)val;
+			const char *bdata = (const char *)val + sizeof(uint32_t);
+			respond_ok(c, req_id, bdata, blen);
+			return;
+		}
 		const char *sval = (const char *)val;
 		size_t vlen = strlen(sval);
 		char *out = malloc(vlen + 2);
@@ -1298,22 +1360,45 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 			}
 			have_ref = 1;
 		}
-		char *payload = malloc(body_len + 1);
-		if (!payload) {
-			respond_err(c, req_id, "out of memory");
-			return;
-		}
-		memcpy(payload, body, body_len);
-		payload[body_len] = '\0';
+		uint32_t vtype = metas[prim_hd].types[1];
+		int nfail = 0;
 
-		if (have_ref) {
-			corm_put(prim_hd, &ref, payload);
+		if (vtype == corm_blob_type()) {
+			size_t total_sz = sizeof(uint32_t) + body_len;
+			char *buf = malloc(total_sz);
+			if (!buf) {
+				respond_err(c, req_id, "out of memory");
+				return;
+			}
+			*(uint32_t *)buf = (uint32_t)body_len;
+			memcpy(buf + sizeof(uint32_t), body, body_len);
+
+			if (have_ref) {
+				corm_put(prim_hd, &ref, buf);
+			} else {
+				ref = corm_put(prim_hd, NULL, buf);
+			}
+			nfail = corm_fanout_store(ref, body, body_len, vtype);
+			corm_save();
+			free(buf);
 		} else {
-			ref = corm_put(prim_hd, NULL, payload);
+			char *payload = malloc(body_len + 1);
+			if (!payload) {
+				respond_err(c, req_id, "out of memory");
+				return;
+			}
+			memcpy(payload, body, body_len);
+			payload[body_len] = '\0';
+
+			if (have_ref) {
+				corm_put(prim_hd, &ref, payload);
+			} else {
+				ref = corm_put(prim_hd, NULL, payload);
+			}
+			nfail = corm_fanout_store(ref, payload, body_len, CM_STR);
+			corm_save();
+			free(payload);
 		}
-		int nfail = corm_fanout_store(ref, payload, body_len, CM_STR);
-		corm_save();
-		free(payload);
 		if (nfail > 0) {
 			g_index_degraded = 1;
 			respond_err(c, req_id, "partial failure: axis index update failed");
@@ -1484,7 +1569,6 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 
 		ranker_axis = NULL;
 		ranker_params = NULL;
-		corm_expr_free_tree();
 
 		universe = rec_set_new();
 		rec_set_fill_corm_iter(universe, prim_hd);
@@ -1494,6 +1578,7 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 		if (!R) {
 			rec_set_free(universe);
 			universe = NULL;
+			corm_expr_free_tree();
 			respond_err(c, req_id, "query evaluation produced no set");
 			return;
 		}
@@ -1555,7 +1640,15 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 				const void *rec = corm_get(prim_hd, &refs[i]);
 				if (!rec)
 					continue;
-				buf_printf((char **)&res_buf, &res_len, &res_cap, "%u %f %s\n", refs[i], scores[i], (const char *)rec);
+				if (metas[prim_hd].types[1] == corm_blob_type()) {
+					uint32_t blen = *(const uint32_t *)rec;
+					const char *bdata = (const char *)rec + sizeof(uint32_t);
+					buf_printf((char **)&res_buf, &res_len, &res_cap, "%u %f ", refs[i], scores[i]);
+					buf_append((char **)&res_buf, &res_len, &res_cap, bdata, blen);
+					buf_append((char **)&res_buf, &res_len, &res_cap, "\n", 1);
+				} else {
+					buf_printf((char **)&res_buf, &res_len, &res_cap, "%u %f %s\n", refs[i], scores[i], (const char *)rec);
+				}
 			}
 			if (board) { rec_rank_free(board); board = NULL; }
 			if (refs) { free(refs); refs = NULL; }
@@ -1567,7 +1660,15 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 				const void *rec = corm_get(prim_hd, &rrefs[i]);
 				if (!rec)
 					continue;
-				buf_printf((char **)&res_buf, &res_len, &res_cap, "%u %s\n", rrefs[i], (const char *)rec);
+				if (metas[prim_hd].types[1] == corm_blob_type()) {
+					uint32_t blen = *(const uint32_t *)rec;
+					const char *bdata = (const char *)rec + sizeof(uint32_t);
+					buf_printf((char **)&res_buf, &res_len, &res_cap, "%u ", rrefs[i]);
+					buf_append((char **)&res_buf, &res_len, &res_cap, bdata, blen);
+					buf_append((char **)&res_buf, &res_len, &res_cap, "\n", 1);
+				} else {
+					buf_printf((char **)&res_buf, &res_len, &res_cap, "%u %s\n", rrefs[i], (const char *)rec);
+				}
 			}
 		}
 

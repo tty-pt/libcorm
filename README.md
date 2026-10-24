@@ -130,6 +130,7 @@ cormd -d -s /var/run/corm.sock
 * **Zero Lock Contention**: `libcorm` is deliberately single-threaded to achieve optimal L1/L2 CPU cache residency and microsecond-level query latencies without mutex overhead. For multi-core systems, shard maps per worker thread or connect via `cormd`.
 * **Predictable Memory Footprint**: Compact arena and mask-based doubling allocation prevents memory fragmentation during long-running daemon operations.
 * **Domain-Free Recall Composition**: Decouples search logic from domain specifics. Time, space, text, and vector models simply stream uniform 32-bit candidate sets into `cormr_set_t`.
+* **Isomorphic WASM Memory Shims**: Provides embedded linear memory arena shims (`src/corm_compat.h` and `src/corm.c`) allowing Corm databases to compile and execute directly inside browser WebAssembly guest runtimes with host persistence bindings.
 
 ---
 
