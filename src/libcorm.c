@@ -1693,6 +1693,29 @@ corm_get_copy(uint32_t hd, const void * const key, void *dst)
   memcpy(dst, v, corm_len(corm_get_vtype(hd), v));
 }
 
+  int /* API */
+corm_read(uint32_t hd, const void * const key, void *dst, size_t max_sz)
+{
+  if (!dst || hd >= CM_MAX)
+    return -1;
+
+  corm_head_t *head = &corm_heads[hd];
+  if (head->record_id > 0 && key
+      && strchr((const char *) key, ':') != NULL)
+    return -1;
+
+  const void *v = corm_get(hd, key);
+  if (!v)
+    return -1;
+
+  size_t len = corm_len(corm_get_vtype(hd), v);
+  if (max_sz > 0 && len > max_sz)
+    len = max_sz;
+
+  memcpy(dst, v, len);
+  return 0;
+}
+
 /* }}} */
 
 /* DELETE {{{ */

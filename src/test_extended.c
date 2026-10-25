@@ -765,6 +765,28 @@ static void test_corm_get_copy(void)
 	corm_close(hd);
 }
 
+static void test_corm_read(void)
+{
+	printf("\n=== Test: corm_read safe retrieval ===\n");
+
+	uint32_t hd = corm_open(NULL, NULL, CM_STR, CM_STR, 0xFF, 0);
+	corm_put(hd, "key1", "value1");
+
+	printf("corm_read hit:");
+	char dst[32];
+	memset(dst, 0, sizeof(dst));
+	int rc = corm_read(hd, "key1", dst, sizeof(dst));
+	ASSERT(rc == 0, "hit returns 0");
+	ASSERT(strcmp(dst, "value1") == 0, "copied value string");
+
+	printf("corm_read miss returns -1 safely without aborting:");
+	char dd[16];
+	int miss_rc = corm_read(hd, "missing", dd, sizeof(dd));
+	ASSERT(miss_rc == -1, "miss returns -1");
+
+	corm_close(hd);
+}
+
 static void test_corm_next_copy(void)
 {
 	printf("\n=== Test 16: corm_next_copy ===\n");
@@ -919,6 +941,7 @@ int main(void) {
 	test_file_loading_no_mirror();
 	test_pointer_stability();
 	test_corm_get_copy();
+	test_corm_read();
 	test_corm_next_copy();
 	test_file_reopen_append();
 	
