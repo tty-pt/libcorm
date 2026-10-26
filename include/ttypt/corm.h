@@ -366,6 +366,25 @@ void corm_get_copy(uint32_t hd,
                    void *dst);
 
 /**
+ * @brief Non-aborting safe record retrieval with guaranteed zero-initialization.
+ *
+ * Copies the stored value into dst up to max_sz bytes without aborting.
+ * On miss or error, dst is zero-filled up to max_sz (if max_sz > 0).
+ * On hit, any trailing slack between stored length and max_sz is zero-filled.
+ * Callers never need to pre-zero buffers with memset before calling.
+ *
+ * @param[in]  hd     Map handle.
+ * @param[in]  key    Key to look up.
+ * @param[out] dst    Destination buffer.
+ * @param[in]  max_sz Maximum capacity of dst (0 for full measured length).
+ * @return            0 on success, -1 on miss or invalid argument.
+ */
+int corm_read(uint32_t hd,
+              const void * const key,
+              void *dst,
+              size_t max_sz);
+
+/**
  * @brief Insert or update a pair.
  *
  * Behavior depends on the CM_MULTIVALUE flag:
