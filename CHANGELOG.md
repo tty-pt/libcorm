@@ -1,9 +1,12 @@
-## [2.0.1]
+## [2.1.0]
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/tty-pt/libcorm/main/assets/logo.png" alt="libcorm logo" width="220" />
 </p>
 
+- **Safe Database Retrieval Semantics (`corm_read`)**:
+  - Introduced `int corm_read(uint32_t hd, const void *const key, void *dst, size_t max_sz)` with guaranteed zero-initialization on key misses, negative returns, and invalid handles, plus trailing zero-padding on hits.
+  - Non-aborting, safe record retrieval eliminating crash hazards (`SIGABRT` / `CBUG`) across all downstream tenant modules and simulation engines.
 - **WASM Linear Memory Arena Shims & Host Persistence (`src/corm.c`, `src/corm_compat.h`)**:
   - Added linear memory arena allocator and host persistence imports for executing Corm databases inside WebAssembly browser runtimes.
   - Standardized memory alignment and fallback hooks for headless/WASM targets.
