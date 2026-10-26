@@ -114,7 +114,8 @@ cormd -d -s /var/run/corm.sock
 | `corm_open` | `uint32_t corm_open(file, db, ktype, vtype, mask, flags)` | Open an in-memory or auto-persisted map |
 | `corm_put` | `uint32_t corm_put(hd, key_ptr, val_ptr)` | Insert or update a key-value pair |
 | `corm_get` | `const void *corm_get(hd, key_ptr)` | Retrieve a value by key (`NULL` if absent) |
-| `corm_get_copy` | `int corm_get_copy(hd, key_ptr, out_buf, sz)` | Zero-copy safe retrieval into caller buffer |
+| `corm_read` | `int corm_read(hd, key_ptr, out_buf, max_sz)` | Non-aborting safe retrieval with guaranteed zero-initialization |
+| `corm_get_copy` | `void corm_get_copy(hd, key_ptr, out_buf)` | Copy value directly into buffer (aborts if absent) |
 | `corm_assoc` | `void corm_assoc(sec_hd, prim_hd, cb, ud)` | Automatically maintain an inverted secondary index |
 | `corm_iter` | `uint32_t corm_iter(hd, key_ptr, flags)` | Iterate all entries or scan a sorted range |
 | `corm_rec_reg` | `uint32_t corm_rec_reg(name, fields, n)` | Register a structured record schema |

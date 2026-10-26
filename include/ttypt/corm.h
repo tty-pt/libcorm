@@ -366,9 +366,12 @@ void corm_get_copy(uint32_t hd,
                    void *dst);
 
 /**
- * @brief Non-aborting safe record retrieval into caller buffer.
+ * @brief Non-aborting safe record retrieval with guaranteed zero-initialization.
  *
  * Copies the stored value into dst up to max_sz bytes without aborting.
+ * On miss or error, dst is zero-filled up to max_sz (if max_sz > 0).
+ * On hit, any trailing slack between stored length and max_sz is zero-filled.
+ * Callers never need to pre-zero buffers with memset before calling.
  *
  * @param[in]  hd     Map handle.
  * @param[in]  key    Key to look up.

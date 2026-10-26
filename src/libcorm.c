@@ -1696,23 +1696,38 @@ corm_get_copy(uint32_t hd, const void * const key, void *dst)
   int /* API */
 corm_read(uint32_t hd, const void * const key, void *dst, size_t max_sz)
 {
-  if (!dst || hd >= CM_MAX)
+  if (!dst)
     return -1;
+
+  if (hd >= CM_MAX) {
+    if (max_sz > 0)
+      memset(dst, 0, max_sz);
+    return -1;
+  }
 
   corm_head_t *head = &corm_heads[hd];
   if (head->record_id > 0 && key
-      && strchr((const char *) key, ':') != NULL)
+      && strchr((const char *) key, ':') != NULL) {
+    if (max_sz > 0)
+      memset(dst, 0, max_sz);
     return -1;
+  }
 
   const void *v = corm_get(hd, key);
-  if (!v)
+  if (!v) {
+    if (max_sz > 0)
+      memset(dst, 0, max_sz);
     return -1;
+  }
 
   size_t len = corm_len(corm_get_vtype(hd), v);
   if (max_sz > 0 && len > max_sz)
     len = max_sz;
 
   memcpy(dst, v, len);
+  if (max_sz > len)
+    memset((char *)dst + len, 0, max_sz - len);
+
   return 0;
 }
 
