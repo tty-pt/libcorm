@@ -1,3 +1,16 @@
+## [2.2.0]
+
+- **Native C HTOK v4 Binary Envelope API (`corm_htok_pack`, `corm_htok_unpack`)**:
+  - Implemented high-performance binary packing and unpacking for HTOK v4 containers (`CORM_HTOK_VERSION 4`, `0x48544f4b` magic) directly in pure C (`src/htok.c`, `include/ttypt/corm.h`).
+  - Native support for cognitive triad bitmasks (`tokens`, `utf8`, `uuid`, `history`), LEB128 varint token encoding, delta citation arrays, and flag bitfields (`CORM_HTOK_FLAG_HAS_SUPERSEDES`, `CORM_HTOK_FLAG_HAS_SUPERSEDED_BY`, `CORM_HTOK_FLAG_HAS_EVIDENCE`, `CORM_HTOK_FLAG_IS_ANCHOR`).
+  - Added unit test suite in `src/test_htok.c` asserting lossless JSON-to-HTOK-to-JSON roundtrip conversion and corrupt payload rejection.
+- **`cormd` Resident Daemon JSON Protocol (`PUT_JSON`, `GET_JSON`)**:
+  - Added native `PUT_JSON` and `GET_JSON` socket protocol commands to `cormd` (`src/cormd.c`).
+  - Enables direct JSON-in / JSON-out IPC from dynamic language runtimes (such as TypeScript/Deno in `pi-mm`) with transparent in-daemon binary HTOK v4 packing, database storage, fanout indexing, and unpacking.
+- **Documentation & CLI Usability Overhauls**:
+  - Added multi-axis syntax documentation, prominent `corm` CLI reference, and `cormd` daemon operational guides to `README.md`.
+  - Streamlined code-first quickstarts and API tables for human reader efficiency.
+
 ## [2.1.0]
 
 - **Safe Database Retrieval Semantics (`corm_read`)**:
