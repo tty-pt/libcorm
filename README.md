@@ -10,36 +10,33 @@
 [![Recall Kernel](https://img.shields.io/badge/engine-recall--kernel-blueviolet)](#)
 [![Resident Daemon](https://img.shields.io/badge/daemon-cormd-4B8BBE)](#)
 
-> Need SQLite-level query indexing in plain C without disk overhead or SQL parser complexity? **libcorm** provides ultra-fast in-memory key-value maps with secondary indexes, bidirectional mirrors, record-aware schemas, the unified recall kernel, and the `cormd` resident memory daemon.
+> Ultra-fast in-memory key-value maps, secondary indexes, record-aware schemas, unified multi-axis recall kernel, the `corm` CLI tool, and the `cormd` resident memory daemon in plain C. Canonical header is `<ttypt/corm.h>`.
 
 ---
 
-## The 50-Microsecond Multidimensional Search Story
+## 1. Quickstart
 
-Imagine you are building a virtual world, game, or search engine. A user asks:
-> *"Show me all enemies within 30 meters who were active in the last 5 minutes and have 'fire' in their name."*
+### The `corm` CLI Tool (< 30 Seconds)
+Index documents, query entries, and run composed multi-axis searches directly from the command line:
 
-In traditional architectures, you would query three separate databases (spatial, time-series, text) and write slow glue code to merge them in application memory.
+```bash
+# 1. Ingest documents tagged with lexical (liblemma) and vector (libsepal) axes:
+corm -p "Zero-copy in-memory caching and RAM table indexing" docs.db@lemma,sepal:a:s
+corm -p "Traditional Portuguese bakery baking warm pão de queijo" docs.db@lemma,sepal:a:s
+corm -p "High-performance vector similarity search in pure C" docs.db@lemma,sepal:a:s
 
-In `libcorm`, the Space engine ([libislet](https://github.com/tty-pt/libislet)), Time engine ([libjoint](https://github.com/tty-pt/libjoint)), and Text engine ([liblemma](https://github.com/tty-pt/liblemma)) each stream 32-bit entity IDs into an in-memory candidate pool. `libcorm` intersects them in CPU cache lines in **50 microseconds**. No SQL parser, no disk latency, and zero malloc calls in the query loop.
+# 2. List all indexed entries:
+corm -l docs.db
 
----
+# 3. Composed multi-axis boolean search across axes:
+corm -X "lemma AND sepal" --lemma="caching" --sepal="in-memory" docs.db@lemma,sepal:a:s
 
-## The Unified Recall Kernel (`<ttypt/cormr.h>`)
+# 4. List all loaded/available axis plugins:
+corm --list-axes
+```
 
-`libcorm` hosts the domain-free Recall Kernel, standardizing multi-dimensional retrieval into a high-throughput `"filter by axis → join → rank"` pipeline over uniform 32-bit references (`cormr_ref_t`). Queries compose seamlessly across four independent domain axes:
-
-- **[libjoint](https://github.com/tty-pt/libjoint)** (Time Axis): Evaluates temporal presence windows and constant-presence intervals (`cormr_axis_register("time", ...)`).
-- **[libislet](https://github.com/tty-pt/libislet)** (Space Axis): Evaluates multi-dimensional spatial bounding boxes using Morton Z-order indexing (`cormr_axis_register("space", ...)`).
-- **[liblemma](https://github.com/tty-pt/liblemma)** (Text Axis): Evaluates accent-preserving token matches and contiguous phrases (`cormr_axis_register("text", ...)`).
-- **[libsepal](https://github.com/tty-pt/libsepal)** (Meaning Axis): Ranks vector candidates via two-stage ANN search (Hamming prefilter + cosine rerank).
-
----
-
-## Quickstart
-
-### 1. In-Memory Key-Value Map with Secondary Index
-Index active player sessions with instant secondary lookup in under 15 lines:
+### In-Memory C API
+Index player sessions with instant secondary lookup and safe retrieval in under 15 lines:
 
 ```c
 #include <stdio.h>
@@ -53,8 +50,9 @@ int main(void) {
     uint32_t player_id = 1001;
     corm_put(sessions, &player_id, "session_token_xyz");
 
-    const char *token = (const char *)corm_get(sessions, &player_id);
-    if (token) {
+    // Safe, non-aborting retrieval:
+    char token[64];
+    if (corm_read(sessions, &player_id, token, sizeof(token)) == 0) {
         printf("Player %u active session: %s\n", player_id, token);
     }
 
@@ -65,11 +63,51 @@ int main(void) {
 
 Compile and link:
 ```sh
-cc player_session.c $(pkg-config --cflags --libs corm)
+cc player_session.c $(pkg-config --cflags --libs libcorm) -o player_session
 ```
 
-### 2. Multi-Axis Recall Query (`<ttypt/cormr.h>`)
-Compose complex queries across text, spatial, and temporal filters with streaming scoring:
+---
+
+## 2. `cormd` Resident Memory Daemon
+
+`libcorm` includes `cormd`, a resident memory daemon designed to keep high-frequency database maps, inverted full-text indexes, and vector stores warm in shared RAM:
+- **Zero Cold-Boot Latency**: Keeps indexes memory-resident across ephemeral CLI tools, CGI scripts, and worker restarts.
+- **Fast Local IPC**: Communicates over non-blocking UNIX domain sockets with zero-copy shared memory mapping.
+- **Background Persistence**: Flushes write journals to disk asynchronously while maintaining sub-microsecond in-memory read throughput.
+
+```bash
+# Start cormd in background listening on standard socket
+cormd -d -s /var/run/corm.sock
+```
+
+All `corm` CLI commands automatically lease and route mutations through `cormd` when `.cormd.lock` is held.
+
+---
+
+## 3. `corm` CLI Options & Multi-Axis Syntax
+
+The filespec syntax `file[@axis1,axis2...][:k[:v]]` binds dynamic axis plugins to database columns:
+- `k` and `v`: Key and value types (`u` = uint32, `s` = string, `a` = auto-increment uint32 ID).
+- `@axis`: Attaches domain axis engines: `@lemma` (Text), `@sepal` (Meaning), `@joint` (Time), `@islet` (Space).
+
+| Option | Syntax | Description |
+| :--- | :--- | :--- |
+| `-p` | `-p KEY[:VAL]` | Put a key/value pair into database |
+| `-g` | `-g KEY` (or `-g .`) | Get value(s) for a key (use `.` for all keys) |
+| `-d` / `-D` | `-d KEY[:VAL]` | Delete key/value pair (`-D` deletes all matching multivalue entries) |
+| `-l` | `-l` | List all stored values |
+| `-X` | `-X "EXPR"` | Composed multi-axis set query (`AND`, `OR`, `EXCEPT`, `NOT`) |
+| `--<axis>=VAL` | `--lemma="query"` | Pass query parameters to specific bound axis plugin |
+| `--list-axes` | *none* | List all registered axis plugins and exit |
+
+---
+
+## 4. The Unified Recall Kernel (`<ttypt/cormr.h>`)
+
+`libcorm` hosts the domain-free Recall Kernel, standardizing multi-dimensional retrieval into a high-throughput `"filter by axis → join → rank"` pipeline over uniform 32-bit references (`cormr_ref_t`).
+
+### 50-Microsecond Multidimensional Search
+Instead of querying separate databases (spatial, time-series, text) and merging them in application memory, the Space engine ([libislet](https://github.com/tty-pt/libislet)), Time engine ([libjoint](https://github.com/tty-pt/libjoint)), Text engine ([liblemma](https://github.com/tty-pt/liblemma)), and Vector engine ([libsepal](https://github.com/tty-pt/libsepal)) each stream 32-bit entity IDs into an in-memory candidate pool. `libcorm` intersects them in CPU cache lines in **50 microseconds** with zero malloc calls in the query loop.
 
 ```c
 #include <ttypt/corm.h>
@@ -92,53 +130,28 @@ void search_players(void) {
 
 ---
 
-## `cormd` Resident Memory Daemon
-
-`libcorm` includes `cormd`, a resident memory daemon designed to keep high-frequency database maps, inverted full-text indexes, and vector stores warm in shared RAM:
-
-- **Eliminates Cold Boot Latency**: Keeps indexes memory-resident across ephemeral command-line tools, CGI handlers, and worker restarts.
-- **Fast Local IPC**: Communicates over non-blocking UNIX domain sockets with zero-copy shared memory mapping.
-- **Background Persistence**: Flushes write journals to disk asynchronously while maintaining sub-microsecond in-memory read throughput.
-
-```bash
-# Start cormd in background listening on standard socket
-cormd -d -s /var/run/corm.sock
-```
-
----
-
-## Core API (The Essential 20%)
+## 5. Core API Reference
 
 | Function | Signature | Description |
 | :--- | :--- | :--- |
 | `corm_open` | `uint32_t corm_open(file, db, ktype, vtype, mask, flags)` | Open an in-memory or auto-persisted map |
 | `corm_put` | `uint32_t corm_put(hd, key_ptr, val_ptr)` | Insert or update a key-value pair |
-| `corm_get` | `const void *corm_get(hd, key_ptr)` | Retrieve a value by key (`NULL` if absent) |
-| `corm_read` | `int corm_read(hd, key_ptr, out_buf, max_sz)` | Non-aborting safe retrieval with guaranteed zero-initialization |
-| `corm_get_copy` | `void corm_get_copy(hd, key_ptr, out_buf)` | Copy value directly into buffer (aborts if absent) |
+| `corm_get` | `const void *corm_get(hd, key_ptr)` | Retrieve a direct value pointer (`NULL` if absent) |
+| `corm_read` | `int corm_read(hd, key_ptr, out_buf, max_sz)` | Non-aborting safe retrieval with zero-initialization on miss |
+| `corm_del` | `int corm_del(hd, key_ptr)` | Delete key-value entry from map |
 | `corm_assoc` | `void corm_assoc(sec_hd, prim_hd, cb, ud)` | Automatically maintain an inverted secondary index |
 | `corm_iter` | `uint32_t corm_iter(hd, key_ptr, flags)` | Iterate all entries or scan a sorted range |
 | `corm_rec_reg` | `uint32_t corm_rec_reg(name, fields, n)` | Register a structured record schema |
-| `cormr_set_new`| `cormr_set_t *cormr_set_new(void)` | Allocate arena for cross-axis candidate set joins |
 | `cormr_query_run` | `cormr_rank_t *cormr_query_run(query)` | Execute multi-axis boolean join and rank loop |
 
 👉 *For custom type registration, multi-value keys, ID managers, and the complete 40+ function reference, see [docs/API.md](docs/API.md).*
 
 ---
 
-## Design Philosophy: Constraints as Superpowers
-
-* **Zero Lock Contention**: `libcorm` is deliberately single-threaded to achieve optimal L1/L2 CPU cache residency and microsecond-level query latencies without mutex overhead. For multi-core systems, shard maps per worker thread or connect via `cormd`.
-* **Predictable Memory Footprint**: Compact arena and mask-based doubling allocation prevents memory fragmentation during long-running daemon operations.
-* **Domain-Free Recall Composition**: Decouples search logic from domain specifics. Time, space, text, and vector models simply stream uniform 32-bit candidate sets into `cormr_set_t`.
-* **Isomorphic WASM Memory Shims**: Provides embedded linear memory arena shims (`src/corm_compat.h` and `src/corm.c`) allowing Corm databases to compile and execute directly inside browser WebAssembly guest runtimes with host persistence bindings.
-
----
-
-## Installation & Build
+## 6. Installation & Build
 
 ### Prebuilt Packages
-Prebuilt packages are distributed from tty.pt for Linux (APT / Alpine / Arch / Fedora-RHEL), macOS (Homebrew), Windows (winget / MSYS2), and OpenBSD. Follow the [installation instructions](https://github.com/tty-pt/ci/blob/main/docs/install.md) and use **libcorm** as the package name.
+Prebuilt packages for Linux (APT / Alpine / Arch / Fedora-RHEL), macOS (Homebrew), Windows (winget / MSYS2), and OpenBSD are distributed via [tty.pt packages](https://github.com/tty-pt/ci/blob/main/docs/install.md). Use **libcorm** as the package name.
 
 ### Build from Source
 ```sh

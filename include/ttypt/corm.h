@@ -998,6 +998,49 @@ const char *corm_field_get(uint32_t hd, const char *item_id,
 
 /** @} */
 
+/**
+ * @defgroup corm_htok HTOK v4 Native Binary Envelope API
+ * @brief Pack and unpack HTOK v4 binary containers directly in C.
+ * @{
+ */
+
+#define CORM_HTOK_MAGIC   0x48544f4b  /* "HTOK" */
+#define CORM_HTOK_VERSION 4
+
+#define CORM_HTOK_TYPE_TOKENS  1
+#define CORM_HTOK_TYPE_UTF8    2
+#define CORM_HTOK_TYPE_UUID    3
+#define CORM_HTOK_TYPE_HISTORY 4
+
+#define CORM_HTOK_FLAG_HAS_SUPERSEDES    0x01
+#define CORM_HTOK_FLAG_HAS_SUPERSEDED_BY 0x02
+#define CORM_HTOK_FLAG_HAS_EVIDENCE      0x04
+#define CORM_HTOK_FLAG_IS_ANCHOR         0x08
+
+/**
+ * @brief Pack a JSON string representation of a memory envelope into HTOK v4 binary bytes.
+ *
+ * @param json_str Pointer to JSON string.
+ * @param json_len Length of JSON string in bytes (or 0 for strlen).
+ * @param out_bytes Output pointer receiving allocated binary buffer (caller frees with free()).
+ * @param out_len Output pointer receiving size in bytes of binary buffer.
+ * @return 0 on success, negative error code on failure.
+ */
+int corm_htok_pack(const char *json_str, size_t json_len, uint8_t **out_bytes, size_t *out_len);
+
+/**
+ * @brief Unpack an HTOK v4 binary buffer into a clean JSON string representation.
+ *
+ * @param bytes Pointer to binary HTOK v4 data.
+ * @param len Size of binary data in bytes.
+ * @param out_json Output pointer receiving allocated JSON string (caller frees with free()).
+ * @param out_json_len Output pointer receiving length of JSON string.
+ * @return 0 on success, negative error code on failure.
+ */
+int corm_htok_unpack(const uint8_t *bytes, size_t len, char **out_json, size_t *out_json_len);
+
+/** @} */
+
 #include "./cormr.h"
 
 #endif /* CORM_H */
