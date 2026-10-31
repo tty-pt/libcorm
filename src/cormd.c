@@ -1256,8 +1256,8 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 
 	int tokens = sscanf(hdr, "%31s %63s %1023s %1023s %zu", op, req_id, arg1, arg2, &parsed_blen);
 
-	if (!strcmp(op, "PUT") || !strcmp(op, "DEL") || !strcmp(op, "DEL_ALL") ||
-	    !strcmp(op, "GET") || !strcmp(op, "LIST") || !strcmp(op, "QUERY") ||
+	if (!strcmp(op, "PUT") || !strcmp(op, "PUT_JSON") || !strcmp(op, "DEL") || !strcmp(op, "DEL_ALL") ||
+	    !strcmp(op, "GET") || !strcmp(op, "GET_JSON") || !strcmp(op, "LIST") || !strcmp(op, "QUERY") ||
 	    !strcmp(op, "RECONCILE")) {
 		if (arg1[0] && !check_database_match(arg1)) {
 			respond_err(c, req_id, "database mismatch: daemon serving different database");
@@ -1349,6 +1349,58 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 		return;
 	}
 
+	if (!strcmp(op, "GET_JSON")) {
+		/* arg1 = filespec, arg2 = ref */
+		uint32_t ref = 0;
+		if (!corm_write_ref(arg2, &ref)) {
+			respond_ok(c, req_id, "-1\n", 3);
+			return;
+		}
+		const void *val = corm_get(prim_hd, &ref);
+		if (!val) {
+			respond_ok(c, req_id, "-1\n", 3);
+			return;
+		}
+		if (metas[prim_hd].types[1] == corm_blob_type()) {
+			uint32_t blen = *(const uint32_t *)val;
+			const uint8_t *bdata = (const uint8_t *)val + sizeof(uint32_t);
+			char *json_out = NULL;
+			size_t json_len = 0;
+			int rc = corm_htok_unpack(bdata, blen, &json_out, &json_len);
+			if (rc != 0 || !json_out) {
+				respond_err(c, req_id, "htok unpack failed");
+				return;
+			}
+			char *out = malloc(json_len + 2);
+			if (!out) {
+				free(json_out);
+				respond_err(c, req_id, "out of memory");
+				return;
+			}
+			memcpy(out, json_out, json_len);
+			out[json_len] = '\n';
+			out[json_len + 1] = '\0';
+			respond_ok(c, req_id, out, json_len + 1);
+			free(json_out);
+			free(out);
+			return;
+		} else {
+			const char *sval = (const char *)val;
+			size_t vlen = strlen(sval);
+			char *out = malloc(vlen + 2);
+			if (!out) {
+				respond_err(c, req_id, "out of memory");
+				return;
+			}
+			memcpy(out, sval, vlen);
+			out[vlen] = '\n';
+			out[vlen + 1] = '\0';
+			respond_ok(c, req_id, out, vlen + 1);
+			free(out);
+			return;
+		}
+	}
+
 	if (!strcmp(op, "PUT")) {
 		/* tokens: PUT req_id filespec ref body_len */
 		uint32_t ref = 0;
@@ -1399,6 +1451,99 @@ process_request(struct client *c, const char *hdr, const char *body, size_t body
 			corm_save();
 			free(payload);
 		}
+		if (nfail > 0) {
+			g_index_degraded = 1;
+			respond_err(c, req_id, "partial failure: axis index update failed");
+			return;
+		}
+		char rstr[32];
+		int rlen = snprintf(rstr, sizeof(rstr), "%u\n", ref);
+		respond_ok(c, req_id, rstr, rlen);
+		return;
+	}
+
+	if (!strcmp(op, "PUT_JSON")) {
+		/* tokens: PUT_JSON req_id filespec ref body_len */
+		uint32_t ref = 0;
+		int have_ref = 0;
+		if (arg2[0] && strcmp(arg2, ".") != 0 && strcmp(arg2, "0") != 0) {
+			if (!corm_write_ref(arg2, &ref)) {
+				respond_err(c, req_id, "invalid ref operand");
+				return;
+			}
+			have_ref = 1;
+		}
+
+		uint32_t vtype = metas[prim_hd].types[1];
+		int nfail = 0;
+
+		if (vtype == corm_blob_type()) {
+			uint8_t *htok_bytes = NULL;
+			size_t htok_len = 0;
+			int rc = corm_htok_pack(body, body_len, &htok_bytes, &htok_len);
+			if (rc != 0 || !htok_bytes) {
+				respond_err(c, req_id, "htok pack failed");
+				return;
+			}
+
+			size_t total_sz = sizeof(uint32_t) + htok_len;
+			char *buf = malloc(total_sz);
+			if (!buf) {
+				free(htok_bytes);
+				respond_err(c, req_id, "out of memory");
+				return;
+			}
+			*(uint32_t *)buf = (uint32_t)htok_len;
+			memcpy(buf + sizeof(uint32_t), htok_bytes, htok_len);
+
+			if (have_ref) {
+				corm_put(prim_hd, &ref, buf);
+			} else {
+				ref = corm_put(prim_hd, NULL, buf);
+			}
+			nfail = corm_fanout_store(ref, htok_bytes, htok_len, vtype);
+			corm_save();
+			free(buf);
+			free(htok_bytes);
+		} else {
+			char *payload = NULL;
+			size_t plen = 0;
+			if (body_len < 11 || body[4] != '-' || body[7] != '-' || body[10] != ':') {
+				time_t now = time(NULL);
+				struct tm *tm = gmtime(&now);
+				char pfx[32];
+				int pfx_len = snprintf(pfx, sizeof(pfx), "%04d-%02d-%02d:",
+					tm ? tm->tm_year + 1900 : 2026, tm ? tm->tm_mon + 1 : 1, tm ? tm->tm_mday : 1);
+				plen = pfx_len + body_len;
+				payload = malloc(plen + 1);
+				if (!payload) {
+					respond_err(c, req_id, "out of memory");
+					return;
+				}
+				memcpy(payload, pfx, pfx_len);
+				memcpy(payload + pfx_len, body, body_len);
+				payload[plen] = '\0';
+			} else {
+				plen = body_len;
+				payload = malloc(plen + 1);
+				if (!payload) {
+					respond_err(c, req_id, "out of memory");
+					return;
+				}
+				memcpy(payload, body, body_len);
+				payload[plen] = '\0';
+			}
+
+			if (have_ref) {
+				corm_put(prim_hd, &ref, payload);
+			} else {
+				ref = corm_put(prim_hd, NULL, payload);
+			}
+			nfail = corm_fanout_store(ref, payload, plen, CM_STR);
+			corm_save();
+			free(payload);
+		}
+
 		if (nfail > 0) {
 			g_index_degraded = 1;
 			respond_err(c, req_id, "partial failure: axis index update failed");
