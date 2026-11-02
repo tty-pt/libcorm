@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <ttypt/qsys.h>
+#include <ttypt/stele.h>
 
 #define DB_MASK 0x3
 #define MAX_LEN (BUFSIZ * 2)

@@ -4,7 +4,7 @@
 #
 #   make -C external/libcorm/tests
 #
-# Links against the system-installed libcorm.so/libqsys.so (the same ones
+# Links against the system-installed libcorm.so/libstele.so (the same ones
 # libjoint.so/libsepal.so were built against -- one loaded copy of each,
 # avoids duplicate global-registry state at runtime) and this repo's
 # ttypt/corm.h (byte-identical to the installed copies).
@@ -16,7 +16,7 @@ CORM_INC  := ../include
 CFLAGS  := -Wall -Wextra -Wpedantic -g \
            -I$(CORM_INC) -I$(JOINT_DIR)/include -I$(SEPAL_DIR)/include
 LDFLAGS :=
-LDLIBS  := -ljoint -lsepal -lcorm -lqsys
+LDLIBS  := -ljoint -lsepal -lcorm -lstele
 
 all: fixture_id_join
 

@@ -1,7 +1,8 @@
 INSTALL_BIN := corm cormd
 all := libcorm corm cormd test test_extended test_multivalue test_record test_persist rec_test rec_axis_test rec_axis_store_test rec_cli_test cormr_test test_htok rec_axis_bench bench_multivalue bench_rec
 
-LDLIBS-libcorm := -lxxhash -lqsys
+LDLIBS := -lstele
+LDLIBS-libcorm := -lxxhash -lstele
 LDLIBS-libcorm-Windows := -lmman
 install-dep-dlls-Windows := libmman.dll
 LDLIBS-bench_multivalue := -lcorm
@@ -14,21 +15,19 @@ LDLIBS-test_record := -lcorm
 LDLIBS-test_persist := -lcorm
 LDLIBS-rec_test := -lcorm
 LDLIBS-rec_axis_test := -lcorm
-LDLIBS-rec_axis_store_test := -lcorm -lqsys
+LDLIBS-rec_axis_store_test := -lcorm -lstele
 LDLIBS-rec_cli_test := -lcorm
 LDLIBS-cormr_test := -lcorm
-LDLIBS-test_htok := -lcorm -lqsys
-LDLIBS-corm := -lcorm -lqsys
+LDLIBS-test_htok := -lcorm -lstele
+LDLIBS-corm := -lcorm -lstele
 LDLIBS-corm-Windows := -lws2_32
-LDLIBS-cormd := -lcorm -lqsys
+LDLIBS-cormd := -lcorm -lstele
 LDLIBS-cormd-Windows := -lws2_32 -lpsapi
 LDLIBS-save_test := -lcorm
 LDLIBS-librec_axis_mock := -lcorm
 LDLIBS-librec_axis_fold := -lcorm
 
 libcorm-obj-y := src/idm.o src/rec.o src/rec_axis.o src/rec_cli.o src/htok.o
-
-add-prefix := ../libqsys
 
 CFLAGS += -g
 
@@ -80,9 +79,8 @@ test: all
 	./test-cli.sh
 	./test-roster.sh
 	./test-fanout.sh
-	./test-real.sh
-	./test-mm.sh
 	./test-shortcircuit.sh
+	@if [ -d ../libjoint/lib ]; then ./test-real.sh && ./test-mm.sh; else echo "Skipping inter-library integration tests in standalone build"; fi
 
 bench: all
 	LD_LIBRARY_PATH=./lib ./bin/bench_multivalue

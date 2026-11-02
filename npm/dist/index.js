@@ -11,7 +11,7 @@ try {
   // 2. Prebuilt platform package
   if (!nativeBinding && typeof process !== "undefined" && process.platform && process.arch) {
     try {
-      nativeBinding = req(`@ttypt/corm-${process.platform}-${process.arch}`);
+      nativeBinding = req(`@tty-pt/corm-${process.platform}-${process.arch}`);
     } catch {}
   }
   // 3. Project cwd build
@@ -30,19 +30,12 @@ function getSharedWasm() {
   }
   try {
     const req = createRequire(import.meta.url);
-    const qsysPaths = [
-      path.join(path.dirname(import.meta.url.replace("file://", "")), "../../libqsys/npm/dist/index.js"),
-      path.join(process.cwd(), "node_modules/@ttypt/qsys/dist/index.js"),
-      "@ttypt/qsys"
-    ];
-    for (const p of qsysPaths) {
-      try {
-        const mod = req(p);
-        if (mod && mod.getSharedWasm) {
-          return mod.getSharedWasm();
-        }
-      } catch {}
-    }
+    try {
+      const mod = req("@tty-pt/stele");
+      if (mod && mod.getSharedWasm) {
+        return mod.getSharedWasm();
+      }
+    } catch {}
   } catch {}
   return null;
 }
@@ -274,7 +267,7 @@ export class JointTemporalAxis {
       // Attempt to load colocated libjoint addon
       const jointPaths = [
         path.join(path.dirname(import.meta.url.replace("file://", "")), "../../../libjoint/npm/build/Release/joint_node.node"),
-        path.join(process.cwd(), "node_modules/@ttypt/joint/build/Release/joint_node.node"),
+        path.join(process.cwd(), "node_modules/@tty-pt/joint/build/Release/joint_node.node"),
         path.join(process.cwd(), "build/Release/joint_node.node")
       ];
       for (const p of jointPaths) {

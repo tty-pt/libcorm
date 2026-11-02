@@ -12,4 +12,4 @@ jobs:
       - name: Run shared CI Test Action
         uses: tty-pt/ci/test@main
         with:
-          deps: "libqsys,libxxhash-dev"
+          deps: "libstele,libxxhash-dev"
