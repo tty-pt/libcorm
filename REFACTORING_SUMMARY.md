@@ -151,7 +151,7 @@ All benchmarks run on:
 **Reproducibility:**
 ```bash
 make
-gcc -o bench_multivalue src/bench_multivalue.c -I./include -L./lib -lcorm -lxxhash -lqsys
+gcc -o bench_multivalue src/bench_multivalue.c -I./include -L./lib -lcorm -lxxhash -lstele
 LD_LIBRARY_PATH=./lib ./bench_multivalue
 ```
 

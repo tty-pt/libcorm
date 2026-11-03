@@ -9,7 +9,7 @@
 
 #include <ttypt/corm.h>
 #include <ttypt/idm.h>
-#include <ttypt/qsys.h>
+#include <ttypt/stele.h>
 #include "corm_compat.h"
 
 #include <stdio.h>
@@ -300,10 +300,10 @@ static void
 corm_axes_dlopen_record(const char *path, int quiet)
 {
 	int before = rec_axis_count();
-	void *h = qsys_dlopen(path, 0);
+	void *h = stl_dlopen(path, 0);
 	if (!h) {
 		if (!quiet) {
-			const char *err = qsys_dlerror();
+			const char *err = stl_dlerror();
 			fprintf(stderr, "cormd: %s: %s\n", path, err ? err : "unknown error");
 		}
 		return;
@@ -330,8 +330,8 @@ corm_axes_dlopen_record(const char *path, int quiet)
 
 	/* Cache plugin option functions */
 	if (loaded_plugs_n < CORM_CLI_PLUGIN_CAP) {
-		void *osym = qsys_dlsym(h, "rec_axis_cli_options");
-		void *csym = qsys_dlsym(h, "rec_axis_config_arg");
+		void *osym = stl_dlsym(h, "rec_axis_cli_options");
+		void *csym = stl_dlsym(h, "rec_axis_config_arg");
 		if (osym && csym) {
 			int exists = 0;
 			for (int p = 0; p < loaded_plugs_n; p++) {
@@ -400,7 +400,7 @@ corm_axes_find_lib(const char *name, char *out, size_t cap)
 static void
 corm_axes_sym(void *h, const char *symname, void *fn, size_t fnsz, int *have)
 {
-	void *sym = qsys_dlsym(h, symname);
+	void *sym = stl_dlsym(h, symname);
 	*have = 0;
 	if (!sym)
 		return;
@@ -424,7 +424,7 @@ corm_axes_close(int slot, const char *name)
 	void *h = corm_axes_handle_for_slot(slot);
 	if (h) {
 		/* 1. Try explicit rec_axis_close if plugin provides it */
-		void *sym = qsys_dlsym(h, "rec_axis_close");
+		void *sym = stl_dlsym(h, "rec_axis_close");
 		if (sym) {
 			void (*close_fn)(void *);
 			memcpy(&close_fn, &sym, sizeof(close_fn));
@@ -435,7 +435,7 @@ corm_axes_close(int slot, const char *name)
 		/* 2. Try <name>_close if plugin exports it (e.g. lemma_close, joint_close, sepal_close) */
 		char cname[128];
 		snprintf(cname, sizeof(cname), "%s_close", name);
-		sym = qsys_dlsym(h, cname);
+		sym = stl_dlsym(h, cname);
 		if (sym) {
 			if (!strcmp(name, "joint")) {
 				void (*jclose)(unsigned);
@@ -459,7 +459,7 @@ corm_axes_bind(int slot, const char *name)
 	void *h = NULL;
 	char path[BUFSIZ];
 	if (corm_axes_find_lib(name, path, sizeof(path))) {
-		h = qsys_dlopen(path, 0);
+		h = stl_dlopen(path, 0);
 	}
 	if (!h)
 		h = corm_axes_handle_for_slot(slot);
@@ -473,7 +473,7 @@ corm_axes_bind(int slot, const char *name)
 			corm_axis_fx[slot].bound = 0;
 		return -1;
 	}
-	void *sym = qsys_dlsym(h, "rec_axis_open");
+	void *sym = stl_dlsym(h, "rec_axis_open");
 	if (!sym) {
 		fprintf(stderr, "cormd: axis '%s': plugin has no rec_axis_open symbol\n", name);
 		if (slot >= 0 && slot < REC_QUERY_MAX_AXES)
@@ -491,7 +491,7 @@ corm_axes_bind(int slot, const char *name)
 	}
 	rec_axis_set_ctx(slot, ctx);
 
-	void *csym = qsys_dlsym(h, "rec_axis_env_config");
+	void *csym = stl_dlsym(h, "rec_axis_env_config");
 	if (csym) {
 		int (*cfg_fn)(void);
 		memcpy(&cfg_fn, &csym, sizeof(cfg_fn));
@@ -508,8 +508,8 @@ corm_axes_bind(int slot, const char *name)
 	}
 
 	if (loaded_plugs_n < CORM_CLI_PLUGIN_CAP) {
-		void *osym = qsys_dlsym(h, "rec_axis_cli_options");
-		void *cfg_sym = qsys_dlsym(h, "rec_axis_config_arg");
+		void *osym = stl_dlsym(h, "rec_axis_cli_options");
+		void *cfg_sym = stl_dlsym(h, "rec_axis_config_arg");
 		if (osym && cfg_sym) {
 			int exists = 0;
 			for (int p = 0; p < loaded_plugs_n; p++) {
@@ -551,8 +551,8 @@ static void
 corm_axes_setup(void)
 {
 	char sidecar[BUFSIZ + 16];
-	qsys_setenv("CORM_AXIS_PRIMARY", corm_path, 1);
-	qsys_setenv("CORM_AXIS_VTYPE", (metas[prim_hd].types[1] == corm_blob_type()) ? "b" : "s", 1);
+	stl_setenv("CORM_AXIS_PRIMARY", corm_path, 1);
+	stl_setenv("CORM_AXIS_VTYPE", (metas[prim_hd].types[1] == corm_blob_type()) ? "b" : "s", 1);
 
 	snprintf(sidecar, sizeof(sidecar), "%s.roster", corm_path);
 	struct stat st;
@@ -1177,11 +1177,11 @@ reconcile_secondary_indexes(char *err_msg, size_t err_sz)
 
 		/* Try explicit reset if plugin exports it */
 		if (h && ctx) {
-			void *rsym = qsys_dlsym(h, "rec_axis_reset");
+			void *rsym = stl_dlsym(h, "rec_axis_reset");
 			if (!rsym) {
 				char rname[128];
 				snprintf(rname, sizeof(rname), "%s_reset", name);
-				rsym = qsys_dlsym(h, rname);
+				rsym = stl_dlsym(h, rname);
 			}
 			if (rsym) {
 				int (*reset_fn)(void *);

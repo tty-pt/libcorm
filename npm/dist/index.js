@@ -1,79 +1,53 @@
-import { createRequire } from "node:module";
-import path from "node:path";
+import { loadWasmModule, loadNativeAddon, getSubstrate } from "@tty-pt/stele";
 
-let nativeBinding = null;
-try {
-  const req = createRequire(import.meta.url);
-  // 1. Local build in package
-  try {
-    nativeBinding = req("../build/Release/corm_node.node");
-  } catch {}
-  // 2. Prebuilt platform package
-  if (!nativeBinding && typeof process !== "undefined" && process.platform && process.arch) {
-    try {
-      nativeBinding = req(`@ttypt/corm-${process.platform}-${process.arch}`);
-    } catch {}
-  }
-  // 3. Project cwd build
-  if (!nativeBinding) {
-    try {
-      nativeBinding = req(path.join(process.cwd(), "build/Release/corm_node.node"));
-    } catch {}
-  }
-} catch {
-  // Native addon not available; in-memory / WASM fallback
-}
+const nativeBinding = loadNativeAddon(import.meta.url, "corm");
+let wasmInstance = null;
 
-function getSharedWasm() {
-  if (globalThis.__ttypt_shared_wasm__) {
-    return globalThis.__ttypt_shared_wasm__;
-  }
-  try {
-    const req = createRequire(import.meta.url);
-    const qsysPaths = [
-      path.join(path.dirname(import.meta.url.replace("file://", "")), "../../libqsys/npm/dist/index.js"),
-      path.join(process.cwd(), "node_modules/@ttypt/qsys/dist/index.js"),
-      "@ttypt/qsys"
-    ];
-    for (const p of qsysPaths) {
-      try {
-        const mod = req(p);
-        if (mod && mod.getSharedWasm) {
-          return mod.getSharedWasm();
-        }
-      } catch {}
-    }
-  } catch {}
-  return null;
+/**
+ * Plug-and-play WebAssembly loader for @tty-pt/corm via Stele substrate
+ */
+export function getCormWasm() {
+  if (wasmInstance) return wasmInstance;
+  wasmInstance = loadWasmModule(new URL("./corm.wasm", import.meta.url));
+  return wasmInstance;
 }
 
 /**
- * CandidateSet: Fast set algebra operations wrapping cormr_set_t
+ * CandidateSet: Fast set algebra operations strictly wrapping C cormr_set_t via WebAssembly
  */
 export class CandidateSet {
-  constructor(handle) {
-    if (handle) {
+  constructor(handle, options = {}) {
+    if (handle && typeof handle === "object") {
       this.handle = handle;
-    } else if (nativeBinding) {
+    } else if (handle && typeof handle === "number") {
+      this.wasmHandle = handle;
+    } else if (options.wasm || !nativeBinding) {
+      const wasm = getCormWasm();
+      if (!wasm || !wasm.exports.cormr_set_new) {
+        throw new Error("WebAssembly substrate for @tty-pt/corm is unavailable");
+      }
+      this.wasmHandle = wasm.exports.cormr_set_new();
+    } else if (nativeBinding && nativeBinding.setCreate) {
       this.handle = nativeBinding.setCreate();
     } else {
-      const wasm = getSharedWasm();
-      if (wasm) {
-        this.wasmHandle = wasm.cormr_set_new();
-      } else {
-        this._inMemory = new Set();
+      const wasm = getCormWasm();
+      if (!wasm || !wasm.exports.cormr_set_new) {
+        throw new Error("WebAssembly substrate for @tty-pt/corm is unavailable");
       }
+      this.wasmHandle = wasm.exports.cormr_set_new();
     }
+  }
+
+  static wasm() {
+    return new CandidateSet(null, { wasm: true });
   }
 
   push(ref) {
     if (nativeBinding && this.handle) {
       nativeBinding.setPush(this.handle, ref);
-    } else if (this.wasmHandle !== undefined) {
-      const wasm = getSharedWasm();
-      if (wasm) wasm.cormr_set_push(this.wasmHandle, ref);
-    } else if (this._inMemory) {
-      this._inMemory.add(ref);
+    } else {
+      const wasm = getCormWasm();
+      wasm.exports.cormr_set_push(this.wasmHandle, ref);
     }
     return this;
   }
@@ -81,9 +55,9 @@ export class CandidateSet {
   seal() {
     if (nativeBinding && this.handle) {
       nativeBinding.setSeal(this.handle);
-    } else if (this.wasmHandle !== undefined) {
-      const wasm = getSharedWasm();
-      if (wasm) wasm.cormr_set_seal(this.wasmHandle);
+    } else {
+      const wasm = getCormWasm();
+      wasm.exports.cormr_set_seal(this.wasmHandle);
     }
     return this;
   }
@@ -91,18 +65,67 @@ export class CandidateSet {
   toArray() {
     if (nativeBinding && this.handle) {
       return nativeBinding.setToArray(this.handle);
-    } else if (this.wasmHandle !== undefined) {
-      const wasm = getSharedWasm();
-      if (wasm) {
-        const count = wasm.cormr_set_count(this.wasmHandle);
-        const ptr = wasm.cormr_set_at(this.wasmHandle);
-        const arr = new Uint32Array(wasm.memory.buffer, ptr, count);
-        return Array.from(arr);
-      }
-    } else if (this._inMemory) {
-      return Array.from(this._inMemory);
     }
-    return [];
+    const wasm = getCormWasm();
+    const count = wasm.exports.cormr_set_count(this.wasmHandle);
+    const ptr = wasm.exports.cormr_set_at(this.wasmHandle);
+    const mem = getSubstrate().memory.buffer;
+    const arr = new Uint32Array(mem, ptr, count);
+    return Array.from(arr);
+  }
+
+  /**
+   * Returns count of elements in candidate set
+   * @returns {number}
+   */
+  count() {
+    if (nativeBinding && this.handle) {
+      return this.toArray().length;
+    }
+    const wasm = getCormWasm();
+    return wasm.exports.cormr_set_count(this.wasmHandle);
+  }
+
+  /**
+   * Returns raw WASM memory pointer to contiguous uint32_t array for zero-copy cross-module chaining
+   * @returns {number} 32-bit linear address pointer
+   */
+  rawPointer() {
+    if (this.wasmHandle) {
+      const wasm = getCormWasm();
+      return wasm.exports.cormr_set_at(this.wasmHandle);
+    }
+    return 0;
+  }
+
+  /**
+   * Returns zero-copy Uint32Array view directly over WASM linear memory
+   * @returns {Uint32Array}
+   */
+  toUint32Array() {
+    if (this.wasmHandle) {
+      const wasm = getCormWasm();
+      const count = wasm.exports.cormr_set_count(this.wasmHandle);
+      const ptr = wasm.exports.cormr_set_at(this.wasmHandle);
+      const mem = getSubstrate().memory.buffer;
+      return new Uint32Array(mem, ptr, count);
+    }
+    return new Uint32Array(this.toArray());
+  }
+
+  /**
+   * Appends elements from raw uint32_t memory pointer in shared WASM memory
+   * @param {number} ptr
+   * @param {number} count
+   */
+  addFromRaw(ptr, count) {
+    if (!ptr || count <= 0) return this;
+    const mem = getSubstrate().memory.buffer;
+    const view = new Uint32Array(mem, ptr, count);
+    for (let i = 0; i < count; i++) {
+      this.push(view[i]);
+    }
+    return this;
   }
 
   intersect(other) {
@@ -110,12 +133,9 @@ export class CandidateSet {
       const res = nativeBinding.setIntersect(this.handle, other.handle);
       return new CandidateSet(res);
     }
+    const wasm = getCormWasm();
     const res = new CandidateSet();
-    const otherArr = other.toArray();
-    for (const item of this.toArray()) {
-      if (otherArr.includes(item)) res.push(item);
-    }
-    res.seal();
+    wasm.exports.cormr_set_intersect(res.wasmHandle, this.wasmHandle, other.wasmHandle);
     return res;
   }
 
@@ -124,10 +144,9 @@ export class CandidateSet {
       const res = nativeBinding.setUnion(this.handle, other.handle);
       return new CandidateSet(res);
     }
+    const wasm = getCormWasm();
     const res = new CandidateSet();
-    for (const item of this.toArray()) res.push(item);
-    for (const item of other.toArray()) res.push(item);
-    res.seal();
+    wasm.exports.cormr_set_union(res.wasmHandle, this.wasmHandle, other.wasmHandle);
     return res;
   }
 
@@ -136,53 +155,87 @@ export class CandidateSet {
       const res = nativeBinding.setSubtract(this.handle, other.handle);
       return new CandidateSet(res);
     }
+    const wasm = getCormWasm();
     const res = new CandidateSet();
-    const otherArr = other.toArray();
-    for (const item of this.toArray()) {
-      if (!otherArr.includes(item)) res.push(item);
-    }
-    res.seal();
+    wasm.exports.cormr_set_subtract(res.wasmHandle, this.wasmHandle, other.wasmHandle);
     return res;
+  }
+
+  free() {
+    if (nativeBinding && this.handle) {
+      nativeBinding.setFree(this.handle);
+      this.handle = null;
+    } else if (this.wasmHandle) {
+      const wasm = getCormWasm();
+      wasm.exports.cormr_set_free(this.wasmHandle);
+      this.wasmHandle = null;
+    }
   }
 }
 
 /**
- * MinHeapRanker: Bounded streaming min-heap ranker wrapping cormr_rank_t
+ * MinHeapRanker: Bounded streaming top-K ranking strictly wrapping C cormr_rank_t via WebAssembly
  */
 export class MinHeapRanker {
-  constructor(topK = 10, minScore = 0.0) {
+  constructor(topK = 20, minScore = 0.0) {
     this.topK = topK;
     this.minScore = minScore;
-    if (nativeBinding) {
+    if (nativeBinding && nativeBinding.rankCreate) {
       this.handle = nativeBinding.rankCreate(topK, minScore);
     } else {
-      this._items = [];
+      const wasm = getCormWasm();
+      if (!wasm || !wasm.exports.cormr_rank_new) {
+        throw new Error("WebAssembly substrate for @tty-pt/corm is unavailable");
+      }
+      this.wasmHandle = wasm.exports.cormr_rank_new(topK, minScore);
     }
   }
 
   push(ref, score) {
-    if (score < this.minScore) return;
     if (nativeBinding && this.handle) {
       nativeBinding.rankPush(this.handle, ref, score);
     } else {
-      this._items.push({ ref, score });
-      this._items.sort((a, b) => b.score - a.score);
-      if (this._items.length > this.topK) {
-        this._items.length = this.topK;
-      }
+      const wasm = getCormWasm();
+      wasm.exports.cormr_rank_push(this.wasmHandle, ref, score);
     }
+    return this;
   }
 
   sorted() {
     if (nativeBinding && this.handle) {
-      return nativeBinding.rankSorted(this.handle, this.topK);
+      return nativeBinding.rankSorted(this.handle);
     }
-    return this._items || [];
+    const wasm = getCormWasm();
+    const { malloc, free, cormr_rank_sorted } = wasm.exports;
+    const refsPtr = malloc(this.topK * 4);
+    const scoresPtr = malloc(this.topK * 4);
+    const count = cormr_rank_sorted(this.wasmHandle, refsPtr, scoresPtr);
+    const mem = getSubstrate().memory.buffer;
+    const refs = new Uint32Array(mem, refsPtr, count);
+    const scores = new Float32Array(mem, scoresPtr, count);
+    const results = [];
+    for (let i = 0; i < count; i++) {
+      results.push({ ref: refs[i], score: scores[i] });
+    }
+    free(refsPtr);
+    free(scoresPtr);
+    return results;
+  }
+
+  free() {
+    if (nativeBinding && this.handle) {
+      nativeBinding.rankFree(this.handle);
+      this.handle = null;
+    } else if (this.wasmHandle) {
+      const wasm = getCormWasm();
+      wasm.exports.cormr_rank_free(this.wasmHandle);
+      this.wasmHandle = null;
+    }
   }
 }
 
 /**
- * CormDb: Persistent key-value / record storage
+ * CormDb: Multi-axis key-value storage engine
  */
 export class CormDb {
   constructor(filePath, dbName = "default") {
@@ -192,7 +245,7 @@ export class CormDb {
     this.handle = null;
     this._memStore = new Map();
 
-    if (nativeBinding) {
+    if (nativeBinding && nativeBinding.open) {
       this.handle = nativeBinding.open(this.filePath, this.dbName);
     }
   }
@@ -269,32 +322,39 @@ export class JointTemporalAxis {
     this.handle = null;
     this._jointAddon = null;
 
-    try {
-      const req = createRequire(import.meta.url);
-      // Attempt to load colocated libjoint addon
-      const jointPaths = [
-        path.join(path.dirname(import.meta.url.replace("file://", "")), "../../../libjoint/npm/build/Release/joint_node.node"),
-        path.join(process.cwd(), "node_modules/@ttypt/joint/build/Release/joint_node.node"),
-        path.join(process.cwd(), "build/Release/joint_node.node")
-      ];
-      for (const p of jointPaths) {
-        try {
-          this._jointAddon = req(p);
-          if (this._jointAddon) {
-            this.handle = this._jointAddon.init(this.filePath);
-            break;
+    if (typeof process !== "undefined" && process.versions?.node) {
+      try {
+        const getModule = globalThis.process?.getBuiltinModule;
+        const req = getModule ? getModule("module").createRequire(import.meta.url) : null;
+        if (req) {
+          const candidates = [
+            "../build/Release/joint_node.node",
+            "../build/Release/duna_joint.node",
+            "./joint_node.node",
+            "./duna_joint.node"
+          ];
+          for (const c of candidates) {
+            try {
+              this._jointAddon = req(c);
+              if (this._jointAddon) {
+                this.handle = this._jointAddon.init ? this._jointAddon.init(this.filePath) : (this._jointAddon.initDb ? this._jointAddon.initDb(this.filePath) : null);
+                if (this.handle) break;
+              }
+            } catch {}
           }
-        } catch {}
-      }
-    } catch {
-      // In-memory fallback
+        }
+      } catch {}
     }
   }
 
   registerInterval(ref, resourceId, start, end) {
     this.resourceMapping.set(ref, resourceId);
     if (this._jointAddon && this.handle) {
-      this._jointAddon.record(this.handle, ref, start, end);
+      if (this._jointAddon.record) {
+        this._jointAddon.record(this.handle, ref, start, end);
+      } else if (this._jointAddon.recordInterval) {
+        this._jointAddon.recordInterval(this.handle, ref, start, end);
+      }
     } else {
       this.intervals.push({ ref, resourceId, start, end });
     }
@@ -303,8 +363,11 @@ export class JointTemporalAxis {
   fill(params) {
     const set = new CandidateSet();
     if (this._jointAddon && this.handle) {
-      const hits = this._jointAddon.intersect(this.handle, params.start, params.end);
-      for (const ref of hits) {
+      const hits = this._jointAddon.intersect
+        ? this._jointAddon.intersect(this.handle, params.start, params.end)
+        : (this._jointAddon.queryOverlaps ? this._jointAddon.queryOverlaps(this.handle, params.start, params.end) : []);
+      for (const item of hits) {
+        const ref = typeof item === "number" ? item : (item.who !== undefined ? item.who : item.ref);
         if (params.resourceId !== undefined) {
           const res = this.resourceMapping.get(ref);
           if (res !== undefined && res !== params.resourceId) continue;
@@ -326,15 +389,20 @@ export class JointTemporalAxis {
 
   close() {
     if (this._jointAddon && this.handle) {
-      this._jointAddon.close(this.handle);
+      if (this._jointAddon.close) {
+        this._jointAddon.close(this.handle);
+      } else if (this._jointAddon.closeDb) {
+        this._jointAddon.closeDb(this.handle);
+      }
       this.handle = null;
     }
     this.intervals = [];
+    this.resourceMapping.clear();
   }
 }
 
 /**
- * Dense Vector Axis (wrapping vector cosine similarity)
+ * Dense Vector Embedding Axis (wrapping libsepal)
  */
 export class SepalVectorAxis {
   constructor() {
@@ -348,9 +416,12 @@ export class SepalVectorAxis {
 
   rank(params, ref) {
     const vec = this.vectors.get(ref);
-    if (!vec || !params.queryVector || vec.length !== params.queryVector.length) return 0.0;
+    if (!vec || !params.queryVector) return 0.0;
+    if (vec.length !== params.queryVector.length) return 0.0;
 
-    let dot = 0.0, normA = 0.0, normB = 0.0;
+    let dot = 0.0;
+    let normA = 0.0;
+    let normB = 0.0;
     for (let i = 0; i < vec.length; i++) {
       dot += vec[i] * params.queryVector[i];
       normA += vec[i] * vec[i];
@@ -362,7 +433,7 @@ export class SepalVectorAxis {
 }
 
 /**
- * Lexical Search Axis (wrapping Unicode case folding & token matching)
+ * Lexical Search Axis (wrapping liblemma)
  */
 export class LemmaLexicalAxis {
   constructor() {
@@ -459,9 +530,13 @@ export class CormQuery {
       if (!runningSet) {
         runningSet = s;
       } else {
-        if (f.join === "AND") runningSet = runningSet.intersect(s);
-        else if (f.join === "OR") runningSet = runningSet.union(s);
-        else if (f.join === "NOT") runningSet = runningSet.subtract(s);
+        if (f.join === "OR") {
+          runningSet = runningSet.union(s);
+        } else if (f.join === "NOT") {
+          runningSet = runningSet.subtract(s);
+        } else {
+          runningSet = runningSet.intersect(s);
+        }
       }
     }
 
@@ -470,21 +545,26 @@ export class CormQuery {
 
     for (const ref of candidateRefs) {
       let totalScore = 0.0;
-      let matchedAny = false;
+      let totalWeight = 0.0;
 
       for (const r of this.rankers) {
         const axis = this.db.getAxis(r.axis);
         if (axis && axis.rank) {
           const score = await axis.rank(r.params, ref);
           totalScore += score * r.weight;
-          matchedAny = true;
+          totalWeight += r.weight;
         }
       }
 
-      if (!matchedAny) totalScore = 1.0;
-      ranker.push(ref, totalScore);
+      const finalScore = totalWeight > 0 ? totalScore / totalWeight : 1.0;
+      ranker.push(ref, finalScore);
     }
 
-    return ranker.sorted();
+    const topItems = ranker.sorted();
+    return topItems.map((item) => ({
+      ref: item.ref,
+      score: item.score,
+      data: this.db.get(String(item.ref))
+    }));
   }
 }

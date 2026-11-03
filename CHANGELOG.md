@@ -1,3 +1,12 @@
+## [2.2.3] - 2026-11-03
+
+- **Zero-Copy Shared Memory Chaining (`CandidateSet`)**:
+  - Exposed `.count()`, `.rawPointer()`, `.toUint32Array()`, and `.addFromRaw(ptr, count)` on `CandidateSet`.
+  - Enables zero-copy passing of contiguous `uint32_t` reference arrays across WebAssembly modules sharing `@tty-pt/stele`'s linear memory without intermediate JavaScript array allocations.
+- **Standalone `@tty-pt/corm` Package & Centralized Build**:
+  - Published `@tty-pt/corm` providing standalone Node-API native bindings and synchronous WebAssembly fallback (`corm.wasm`).
+  - Integrated with `external/mk/include.mk` (`make wasm`) using `-ffreestanding -flto -O3` and post-link `wasm-opt -O3` optimization (dropping binary size from 66 KB to 53 KB).
+
 ## [2.2.0]
 
 - **Native C HTOK v4 Binary Envelope API (`corm_htok_pack`, `corm_htok_unpack`)**:

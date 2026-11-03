@@ -2,15 +2,15 @@
  * rec_axis_store / rec_axis_unstore / rec_axis_readback plugin exports,
  * proved against the mock axis plugin via dlopen+dlsym — no CLI involved.
  *
- * Mirrors exactly how a consumer CLI would discover the symbols: qsys_dlopen
- * the .so, qsys_dlsym rec_axis_open, bind the returned ctx to the last
+ * Mirrors exactly how a consumer CLI would discover the symbols: stl_dlopen
+ * the .so, stl_dlsym rec_axis_open, bind the returned ctx to the last
  * registered slot, then call store/unstore/get through the dlsym'd pointers.
  * The loosened-8 fixture below is the same one test-cli.sh uses, so the
  * round-trip numbers here double-check the CLI behaviour from the C side.
  */
 
 #include <ttypt/corm.h>
-#include <ttypt/qsys.h>
+#include <ttypt/stele.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,16 +42,16 @@ load_plugin(void)
 {
 	void *sym;
 
-	mock_h = qsys_dlopen("./lib/librec_axis_mock.so", 0);
+	mock_h = stl_dlopen("./lib/librec_axis_mock.so", 0);
 	ASSERT(mock_h != NULL, "mock plugin loads");
 
-	sym = qsys_dlsym(mock_h, "rec_axis_open");
+	sym = stl_dlsym(mock_h, "rec_axis_open");
 	memcpy(&mock_open, &sym, sizeof(mock_open));
-	sym = qsys_dlsym(mock_h, "rec_axis_store");
+	sym = stl_dlsym(mock_h, "rec_axis_store");
 	memcpy(&mock_store, &sym, sizeof(mock_store));
-	sym = qsys_dlsym(mock_h, "rec_axis_unstore");
+	sym = stl_dlsym(mock_h, "rec_axis_unstore");
 	memcpy(&mock_unstore, &sym, sizeof(mock_unstore));
-	sym = qsys_dlsym(mock_h, "rec_axis_readback");
+	sym = stl_dlsym(mock_h, "rec_axis_readback");
 	memcpy(&mock_get, &sym, sizeof(mock_get));
 
 	ASSERT(mock_open != NULL, "rec_axis_open exported");

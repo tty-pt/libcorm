@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <xxhash.h>
-#include <ttypt/qsys.h>
+#include <ttypt/stele.h>
 #include <limits.h>
 #include <unistd.h>
 #include <fcntl.h>

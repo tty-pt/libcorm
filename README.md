@@ -4,7 +4,7 @@
 
 # libcorm
 
-[![npm](https://img.shields.io/badge/npm-@ttypt/corm-CB3837?logo=npm)](npm/README.md)
+[![npm](https://img.shields.io/badge/npm-@tty-pt/corm-CB3837?logo=npm)](npm/README.md)
 [![C99](https://img.shields.io/badge/C-C99-555?logo=c)](#)
 [![BSD-2-Clause](https://img.shields.io/badge/License-BSD--2--Clause-blue)](#)
 [![In-memory maps](https://img.shields.io/badge/in--memory-maps-16A34A)](#)
@@ -163,12 +163,12 @@ sudo make install     # install headers, daemon, and library to system
 
 ---
 
-## 7. JavaScript & WebAssembly Bindings (@ttypt/corm)
+## 7. JavaScript & WebAssembly Bindings (@tty-pt/corm)
 
 Official Node.js and Browser WebAssembly bindings are colocated in [`npm/`](npm/README.md):
 - **Universal Runtime**: Native Node-API (`.node`) for direct OS `mmap` performance with seamless fallback to precompiled WebAssembly (`dist/corm.wasm`) in browsers and serverless.
 - **Recall Kernel & Set Algebra**: Candidate set algebra (`CandidateSet`), streaming min-heap ranking (`MinHeapRanker`), and multi-axis composable queries.
-- **C Development Headers**: Install via `npm install @ttypt/corm` and consume canonical headers from `node_modules/@ttypt/corm/include`.
+- **C Development Headers**: Install via `npm install @tty-pt/corm` and consume canonical headers from `node_modules/@tty-pt/corm/include`.
 
 👉 *For complete TypeScript usage, browser WASM guides, and API reference, see [npm/README.md](npm/README.md).*
 
