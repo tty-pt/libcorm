@@ -51,7 +51,7 @@ export class CandidateSet {
       this.handle = nativeBinding.setCreate();
     } else {
       const wasm = getSharedWasm();
-      if (wasm) {
+      if (wasm && typeof wasm.cormr_set_new === "function") {
         this.wasmHandle = wasm.cormr_set_new();
       } else {
         this._inMemory = new Set();
@@ -64,7 +64,7 @@ export class CandidateSet {
       nativeBinding.setPush(this.handle, ref);
     } else if (this.wasmHandle !== undefined) {
       const wasm = getSharedWasm();
-      if (wasm) wasm.cormr_set_push(this.wasmHandle, ref);
+      if (wasm && typeof wasm.cormr_set_push === "function") wasm.cormr_set_push(this.wasmHandle, ref);
     } else if (this._inMemory) {
       this._inMemory.add(ref);
     }
@@ -76,7 +76,7 @@ export class CandidateSet {
       nativeBinding.setSeal(this.handle);
     } else if (this.wasmHandle !== undefined) {
       const wasm = getSharedWasm();
-      if (wasm) wasm.cormr_set_seal(this.wasmHandle);
+      if (wasm && typeof wasm.cormr_set_seal === "function") wasm.cormr_set_seal(this.wasmHandle);
     }
     return this;
   }
@@ -86,7 +86,7 @@ export class CandidateSet {
       return nativeBinding.setToArray(this.handle);
     } else if (this.wasmHandle !== undefined) {
       const wasm = getSharedWasm();
-      if (wasm) {
+      if (wasm && typeof wasm.cormr_set_count === "function" && typeof wasm.cormr_set_at === "function" && wasm.memory) {
         const count = wasm.cormr_set_count(this.wasmHandle);
         const ptr = wasm.cormr_set_at(this.wasmHandle);
         const arr = new Uint32Array(wasm.memory.buffer, ptr, count);

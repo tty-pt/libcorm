@@ -20,10 +20,10 @@
     "test": "node --test tests/corm.test.mjs"
   },
   "dependencies": {
-    "@tty-pt/stele": "^0.1.0"
+    "@tty-pt/stele": ">=0.0.0"
   },
   "peerDependencies": {
-    "@tty-pt/stele": ">=0.1.0"
+    "@tty-pt/stele": ">=0.0.0"
   },
   "keywords": [
     "corm",
