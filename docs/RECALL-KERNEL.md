@@ -482,7 +482,7 @@ keeping the CLI generic.
 ### Plugin loading stays consumer-side
 
 `dlopen` happens in the CLI or library user, never in libcorm's own link
-table: `ldd bin/corm` shows only `libcorm` + `libqsys` + libc + libxxhash,
+table: `ldd bin/corm` shows only `libcorm` + `libstele` + libc + libxxhash,
 and a `grep -E 'lemma|libjoint|libislet|libsepal'` across libcorm source
 and headers returns zero matches.
 

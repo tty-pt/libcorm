@@ -77,3 +77,24 @@ test("JointTemporalAxis integration with CormDb and CandidateSet", () => {
 
   temporal.close();
 });
+
+test("Zero-copy raw pointer chaining across CandidateSet and JointTimeline", () => {
+  const setA = CandidateSet.wasm();
+  setA.push(100).push(200).push(300).seal();
+
+  assert.equal(setA.count(), 3);
+  assert.ok(setA.rawPointer() > 0);
+
+  const u32 = setA.toUint32Array();
+  assert.equal(u32 instanceof Uint32Array, true);
+  assert.equal(u32.length, 3);
+  assert.equal(u32[0], 100);
+  assert.equal(u32[1], 200);
+  assert.equal(u32[2], 300);
+
+  // Cross-module raw pointer handoff into another CandidateSet
+  const setB = CandidateSet.wasm();
+  setB.addFromRaw(setA.rawPointer(), setA.count()).seal();
+  assert.equal(setB.count(), 3);
+  assert.deepEqual(setB.toArray(), [100, 200, 300]);
+});

@@ -122,7 +122,7 @@
 #include <sys/time.h>
 #include <limits.h>
 #include <errno.h>
-#include <ttypt/qsys.h>
+#include <ttypt/stele.h>
 
 #define DEBUG_LVL 0
 #define DEBUG(lvl, ...) \
@@ -1290,10 +1290,10 @@ static void
 corm_axes_dlopen_record(const char *path, int quiet)
 {
 	int before = rec_axis_count();
-	void *h = qsys_dlopen(path, 0);
+	void *h = stl_dlopen(path, 0);
 	if (!h) {
 		if (!quiet) {
-			const char *err = qsys_dlerror();
+			const char *err = stl_dlerror();
 			fprintf(stderr, "corm: %s: %s\n",
 					path, err ? err : "unknown error");
 		}
@@ -1410,9 +1410,9 @@ static struct corm_axis_fx corm_axis_fx[REC_QUERY_MAX_AXES];
 static void
 corm_axes_sym(void *h, const char *sym_cormr, const char *sym_rec, void *fn, size_t fnsz, int *have)
 {
-	void *sym = qsys_dlsym(h, sym_cormr);
+	void *sym = stl_dlsym(h, sym_cormr);
 	if (!sym && sym_rec)
-		sym = qsys_dlsym(h, sym_rec);
+		sym = stl_dlsym(h, sym_rec);
 	*have = 0;
 	if (!sym)
 		return;
@@ -1426,7 +1426,7 @@ corm_axes_bind(int slot, const char *name)
 	void *h = NULL;
 	char path[BUFSIZ];
 	if (corm_axes_find_lib(name, path, sizeof(path))) {
-		h = qsys_dlopen(path, 0);
+		h = stl_dlopen(path, 0);
 	}
 	if (!h)
 		h = corm_axes_handle_for_slot(slot);
@@ -1450,9 +1450,9 @@ corm_axes_bind(int slot, const char *name)
 			name, slot);
 		return;
 	}
-	void *sym = qsys_dlsym(h, "cormr_axis_open");
+	void *sym = stl_dlsym(h, "cormr_axis_open");
 	if (!sym)
-		sym = qsys_dlsym(h, "rec_axis_open");
+		sym = stl_dlsym(h, "rec_axis_open");
 	if (!sym) {
 		fprintf(stderr,
 			"corm: axis '%s': plugin has no cormr_axis_open or rec_axis_open symbol, "
@@ -1470,9 +1470,9 @@ corm_axes_bind(int slot, const char *name)
 	 * whatever config it needs from its OWN environment; the CLI stays axis-agnostic
 	 * (libsepal reads CORM_SEPAL_EMBED_URL/MODEL/KEY). Missing symbol =
 	 * no-op for that axis. */
-	void *csym = qsys_dlsym(h, "cormr_axis_env_config");
+	void *csym = stl_dlsym(h, "cormr_axis_env_config");
 	if (!csym)
-		csym = qsys_dlsym(h, "rec_axis_env_config");
+		csym = stl_dlsym(h, "rec_axis_env_config");
 	if (csym) {
 		int (*cfg_fn)(void);
 		memcpy(&cfg_fn, &csym, sizeof(cfg_fn));
@@ -1601,16 +1601,16 @@ corm_cli_plugin_flush(void)
 			if (plugs[j].h == h) { dup = 1; break; }
 		if (dup)
 			continue;
-		void *osym = qsys_dlsym(h, "cormr_axis_cli_options");
+		void *osym = stl_dlsym(h, "cormr_axis_cli_options");
 		if (!osym)
-			osym = qsys_dlsym(h, "rec_axis_cli_options");
+			osym = stl_dlsym(h, "rec_axis_cli_options");
 		if (!osym)
 			continue;
 		const rec_axis_cli_option_t *(*opts_fn)(void);
 		memcpy(&opts_fn, &osym, sizeof(opts_fn));
-		void *cfg_sym = qsys_dlsym(h, "cormr_axis_config_arg");
+		void *cfg_sym = stl_dlsym(h, "cormr_axis_config_arg");
 		if (!cfg_sym)
-			cfg_sym = qsys_dlsym(h, "rec_axis_config_arg");
+			cfg_sym = stl_dlsym(h, "rec_axis_config_arg");
 		if (!cfg_sym)
 			continue;
 		int (*cfg)(const char *, const char *);
@@ -1816,8 +1816,8 @@ corm_axes_setup(void)
 	 * primary path verbatim before any axis binds. A derived axis (lemma)
 	 * rebuilds from EXACTLY this primary — the live handle, never a
 	 * directory-guessed roster — so two DBs in one dir can't cross-wire. */
-qsys_setenv("CORM_AXIS_PRIMARY", corm_path, 1);
-qsys_setenv("CORM_AXIS_VTYPE", (metas[prim_hd].types[1] == corm_blob_type()) ? "b" : "s", 1);
+stl_setenv("CORM_AXIS_PRIMARY", corm_path, 1);
+stl_setenv("CORM_AXIS_VTYPE", (metas[prim_hd].types[1] == corm_blob_type()) ? "b" : "s", 1);
 
 	snprintf(sidecar, sizeof(sidecar), "%s.roster", corm_path);
 	struct stat st;

@@ -16,6 +16,9 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <time.h>
+#if defined(_WIN32) && !defined(timegm)
+#define timegm _mkgmtime
+#endif
 #include "ttypt/corm.h"
 
 /* --- LEB128 Varint Helpers --- */

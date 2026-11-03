@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/tty-pt/libcorm/main/assets/logo.png" alt="@ttypt/corm logo" width="220" />
+  <img src="https://raw.githubusercontent.com/tty-pt/libcorm/main/assets/logo.png" alt="@tty-pt/corm logo" width="220" />
 </p>
 
-# @ttypt/corm
+# @tty-pt/corm
 
-[![npm version](https://img.shields.io/badge/npm-v0.2.0-CB3837?logo=npm)](#)
+[![npm version](https://img.shields.io/badge/npm-v2.2.4-CB3837?logo=npm)](#)
 [![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD--2--Clause-blue)](#)
 [![TypeScript Ready](https://img.shields.io/badge/TypeScript-Ready-3178C6?logo=typescript)](#)
 [![Node.js Native](https://img.shields.io/badge/Node.js-N--API-339933?logo=node.js)](#)
@@ -18,11 +18,11 @@
 ## 1. Quickstart
 
 ```bash
-npm install @ttypt/corm
+npm install @tty-pt/corm
 ```
 
 ```typescript
-import { CormDb, CandidateSet, MinHeapRanker } from "@ttypt/corm";
+import { CormDb, CandidateSet, MinHeapRanker } from "@tty-pt/corm";
 
 // 1. Persistent key-value storage (Node mmap or Browser in-memory/OPFS)
 const db = new CormDb("./data.corm", "app_store");
@@ -54,7 +54,7 @@ db.close();
 
 ## 2. Dual-Engine Runtime: Native Speed & Browser Portability
 
-`@ttypt/corm` operates on an infallible 3-tier runtime engine:
+`@tty-pt/corm` operates on an infallible 3-tier runtime engine:
 1. **Node.js Native (N-API)**: Executes native C99 compiled binaries with direct OS memory mapping (`mmap(2)`), zero copy, and multi-gigabyte storage throughput.
 2. **Browser & Edge WebAssembly**: When running in the browser, Cloudflare Workers, or environments without a C compiler, it seamlessly falls back to the pre-compiled `dist/corm.wasm` reactor with zero native dependencies.
 
@@ -65,7 +65,7 @@ db.close();
 The Corm Recall Kernel coordinates orthogonal domain axes (`joint` for time, `islet` for space, `lemma` for text, `sepal` for vectors) into unified boolean filtering and ranking:
 
 ```typescript
-import { CormDb, JointTemporalAxis, SepalVectorAxis } from "@ttypt/corm";
+import { CormDb, JointTemporalAxis, SepalVectorAxis } from "@tty-pt/corm";
 
 const db = new CormDb("./workspace.corm");
 const temporal = new JointTemporalAxis();
@@ -90,7 +90,7 @@ const hits = await db
 This package includes the canonical C development headers in `include/` and `corm.pc`:
 ```makefile
 # Include in your C Makefile without system installation:
-CFLAGS += -I./node_modules/@ttypt/corm/include
+CFLAGS += -I./node_modules/@tty-pt/corm/include
 LDLIBS += -lcorm
 ```
 
