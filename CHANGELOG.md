@@ -1,3 +1,9 @@
+## [2.3.3] - 2026-11-13
+
+- **Packaging**:
+  - Requires `@tty-pt/stele` >=1.6.2 (`^1.6.2`).
+  - The npm tarball is now built once by CI, with a self-contained native addon per platform (`prebuilds/<os>-<cpu>/`) next to `corm.wasm`, and published as verified.
+
 ## [2.3.2] - 2026-11-13
 
 - **Shared Allocator & Disjoint Global-Base (`corm.wasm`)**:
