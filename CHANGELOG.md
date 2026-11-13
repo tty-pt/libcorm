@@ -1,3 +1,9 @@
+## [2.3.2] - 2026-11-13
+
+- **Shared Allocator & Disjoint Global-Base (`corm.wasm`)**:
+  - Linked `corm.wasm` against `@tty-pt/stele`'s shared allocator (`malloc`/`calloc`/`realloc`/`free`) at a disjoint `--global-base=524288` to prevent static data segment collisions across co-loaded WASM modules.
+  - Upgraded `@tty-pt/stele` dependency to `>=1.6.1` (`^1.6.1`).
+
 ## [2.3.1] - 2026-11-13
 
 - **macOS & CI Build System Compatibility**:
