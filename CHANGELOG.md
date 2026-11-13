@@ -1,3 +1,9 @@
+## [2.3.1] - 2026-11-13
+
+- **macOS & CI Build System Compatibility**:
+  - Restored dual GNU Make / BSD Make assignment in mk build toolchain for compatibility with macOS GNU Make 3.81.
+  - Rebuilt and optimized `corm.wasm` artifact.
+
 ## [2.3.0] - 2026-11-13
 
 - **Libstele v1.6.0 Substrate Alignment**:

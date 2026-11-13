@@ -1,6 +1,6 @@
 {
   "name": "@tty-pt/corm",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "type": "module",
   "description": "Universal Node.js and Browser bindings for libcorm and Corm Recall Kernel (cormr)",
   "main": "dist/index.js",
