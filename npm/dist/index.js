@@ -134,7 +134,7 @@ export class CandidateSet {
       return new CandidateSet(res);
     }
     const wasm = getCormWasm();
-    const res = new CandidateSet();
+    const res = new CandidateSet(null, { wasm: Boolean(this.wasmHandle) });
     wasm.exports.cormr_set_intersect(res.wasmHandle, this.wasmHandle, other.wasmHandle);
     return res;
   }
@@ -145,7 +145,7 @@ export class CandidateSet {
       return new CandidateSet(res);
     }
     const wasm = getCormWasm();
-    const res = new CandidateSet();
+    const res = new CandidateSet(null, { wasm: Boolean(this.wasmHandle) });
     wasm.exports.cormr_set_union(res.wasmHandle, this.wasmHandle, other.wasmHandle);
     return res;
   }
@@ -156,7 +156,7 @@ export class CandidateSet {
       return new CandidateSet(res);
     }
     const wasm = getCormWasm();
-    const res = new CandidateSet();
+    const res = new CandidateSet(null, { wasm: Boolean(this.wasmHandle) });
     wasm.exports.cormr_set_subtract(res.wasmHandle, this.wasmHandle, other.wasmHandle);
     return res;
   }
@@ -177,10 +177,10 @@ export class CandidateSet {
  * MinHeapRanker: Bounded streaming top-K ranking strictly wrapping C cormr_rank_t via WebAssembly
  */
 export class MinHeapRanker {
-  constructor(topK = 20, minScore = 0.0) {
+  constructor(topK = 20, minScore = 0.0, options = {}) {
     this.topK = topK;
     this.minScore = minScore;
-    if (nativeBinding && nativeBinding.rankCreate) {
+    if (!options.wasm && nativeBinding && nativeBinding.rankCreate) {
       this.handle = nativeBinding.rankCreate(topK, minScore);
     } else {
       const wasm = getCormWasm();
@@ -189,6 +189,10 @@ export class MinHeapRanker {
       }
       this.wasmHandle = wasm.exports.cormr_rank_new(topK, minScore);
     }
+  }
+
+  static wasm(topK = 20, minScore = 0.0) {
+    return new MinHeapRanker(topK, minScore, { wasm: true });
   }
 
   push(ref, score) {
