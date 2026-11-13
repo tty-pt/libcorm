@@ -1,6 +1,6 @@
 {
   "name": "@tty-pt/corm",
-  "version": "2.2.4",
+  "version": "2.3.0",
   "type": "module",
   "description": "Universal Node.js and Browser bindings for libcorm and Corm Recall Kernel (cormr)",
   "main": "dist/index.js",
@@ -20,10 +20,10 @@
     "test": "node --test tests/corm.test.mjs"
   },
   "peerDependencies": {
-    "@tty-pt/stele": ">=1.5.0"
+    "@tty-pt/stele": ">=1.6.0"
   },
   "devDependencies": {
-    "@tty-pt/stele": "^1.5.2"
+    "@tty-pt/stele": "^1.6.0"
   },
   "keywords": [
     "corm",

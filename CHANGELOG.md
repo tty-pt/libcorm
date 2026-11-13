@@ -1,3 +1,9 @@
+## [2.3.0] - 2026-11-13
+
+- **Libstele v1.6.0 Substrate Alignment**:
+  - Upgraded substrate baseline to @tty-pt/stele@^1.6.0 (>=1.6.0).
+  - Aligned WebAssembly linear memory layout with generic canvas and bridge decoupled runtime.
+
 ## [2.2.4] - 2026-11-03
 
 - **Zero-Copy Shared Memory Chaining (`CandidateSet`) & Substrate Integration**:
