@@ -15,7 +15,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build:native": "mkdir -p build/Release dist && gcc -O3 -fPIC -shared -I/usr/include/node -I../include -I../../libstele/include native/corm_napi.c -L../lib -Wl,-rpath,'$ORIGIN/../../../lib:$ORIGIN/../../lib:$ORIGIN/../../../../libstele/lib:$ORIGIN/../../../libstele/lib:../lib:../../libstele/lib' -L../../libstele/lib -L/usr/lib -lcorm -lstele -o build/Release/corm_node.node && cp build/Release/corm_node.node dist/corm_node.node && cp build/Release/corm_node.node dist/corm.node",
+    "build:native": "mkdir -p build/Release dist && gcc -O3 -fPIC -shared -I/usr/include/node -I../include -I../../libstele/include native/corm_napi.c -L../lib -Wl,-rpath,'$ORIGIN:$ORIGIN/../../stele/prebuilds/linux-x64:$ORIGIN/../../../stele/prebuilds/linux-x64:$ORIGIN/../../../lib:$ORIGIN/../../lib:$ORIGIN/../../../../libstele/lib:$ORIGIN/../../../libstele/lib:../lib:../../libstele/lib' -L../../libstele/lib -L/usr/lib -lcorm -lstele -o build/Release/corm_node.node && cp build/Release/corm_node.node dist/corm_node.node && cp build/Release/corm_node.node dist/corm.node && (test -d prebuilds/linux-x64 && cp build/Release/corm_node.node prebuilds/linux-x64/corm.node || true)",
     "build:wasm": "make -C .. wasm",
     "build": "npm run build:native && npm run build:wasm",
     "test": "node --test tests/corm.test.mjs"

@@ -1027,7 +1027,7 @@ static void corm_axes_dlopen_record(const char *path, int quiet) {
     int before = rec_axis_count();
     void *h = stl_dlopen(path, 0);
     if (!h) {
-        if (!quiet) {
+        if (!quiet && !getenv("CORM_QUIET")) {
             const char *err = stl_dlerror();
             fprintf(stderr, "corm_napi: %s: %s\n", path, err ? err : "unknown error");
         }
@@ -1195,6 +1195,16 @@ static void engine_activate_contexts(CormEngineInstance *eng) {
     for (int slot = 0; slot < REC_QUERY_MAX_AXES; slot++) {
         if (eng->axis_fx[slot].bound && eng->axis_ctx[slot]) {
             rec_axis_set_ctx(slot, eng->axis_ctx[slot]);
+            void *h = corm_axes_handle_for_slot(slot);
+            if (h) {
+                void *csym = stl_dlsym(h, "cormr_axis_env_config");
+                if (!csym) csym = stl_dlsym(h, "rec_axis_env_config");
+                if (csym) {
+                    int (*cfg_fn)(void);
+                    memcpy(&cfg_fn, &csym, sizeof(cfg_fn));
+                    cfg_fn();
+                }
+            }
         }
     }
 }
@@ -1947,6 +1957,7 @@ static CormEngineInstance *get_or_open_engine(const char *filespec, char *err_bu
                 if (r_col) *r_col = '\0';
                 char *save = NULL;
                 engine_activate_contexts(&g_engines[i]);
+                bool roster_changed = false;
                 for (char *tok = strtok_r(r_csv, ",", &save); tok; tok = strtok_r(NULL, ",", &save)) {
                     if (!*tok) continue;
                     bool in_roster = false;
@@ -1968,7 +1979,19 @@ static CormEngineInstance *get_or_open_engine(const char *filespec, char *err_bu
                         if (engine_axis_bind(&g_engines[i], slot, tok) == 0 && !in_roster && g_engines[i].roster_n < REC_QUERY_MAX_AXES) {
                             snprintf(g_engines[i].roster_names[g_engines[i].roster_n], CORM_AXIS_ROSTER_MAX, "%s", tok);
                             g_engines[i].roster_n++;
+                            roster_changed = true;
                         }
+                    }
+                }
+                if (roster_changed && g_engines[i].sidecar_path[0]) {
+                    uint32_t rs = corm_open(g_engines[i].sidecar_path, "@roster", CM_STR, CM_STR, corm_mask_effective(), 0);
+                    if (rs != CM_MISS && rs != 0) {
+                        char csv[1024];
+                        engine_roster_join(&g_engines[i], csv, sizeof(csv));
+                        corm_put(rs, "v", "1");
+                        corm_put(rs, "axes", csv);
+                        corm_save();
+                        corm_close(rs);
                     }
                 }
             }
