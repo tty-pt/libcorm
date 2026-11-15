@@ -967,6 +967,7 @@ typedef struct {
     void *axis_ctx[REC_QUERY_MAX_AXES];
     char axis_specs[REC_QUERY_MAX_AXES][1060];
     struct corm_axis_fx axis_fx[REC_QUERY_MAX_AXES];
+    uint64_t last_used_tick;
 } CormEngineInstance;
 
 static int corm_axes_find_slot(const char *name) {
@@ -1919,8 +1920,9 @@ static int buf_printf(char **buf, size_t *len, size_t *cap, const char *fmt, ...
 }
 
 /* Engine cache by canonical filespec so repeated in-process calls reuse open handles */
-#define MAX_CACHED_ENGINES 16
+#define MAX_CACHED_ENGINES 64
 static CormEngineInstance g_engines[MAX_CACHED_ENGINES];
+static uint64_t g_engine_tick = 0;
 
 static CormEngineInstance *get_or_open_engine(const char *filespec, char *err_buf, size_t err_cap) {
     char raw_path[1024];
@@ -1970,6 +1972,7 @@ static CormEngineInstance *get_or_open_engine(const char *filespec, char *err_bu
                     }
                 }
             }
+            g_engines[i].last_used_tick = ++g_engine_tick;
             return &g_engines[i];
         }
     }
@@ -1982,15 +1985,20 @@ static CormEngineInstance *get_or_open_engine(const char *filespec, char *err_bu
         }
     }
     if (free_slot < 0) {
-        static int next_evict = 0;
-        free_slot = next_evict;
-        next_evict = (next_evict + 1) % MAX_CACHED_ENGINES;
+        int lru_slot = 0;
+        for (int i = 1; i < MAX_CACHED_ENGINES; i++) {
+            if (g_engines[i].last_used_tick < g_engines[lru_slot].last_used_tick) {
+                lru_slot = i;
+            }
+        }
+        free_slot = lru_slot;
         engine_close(&g_engines[free_slot]);
     }
 
     if (engine_open_filespec(&g_engines[free_slot], filespec, err_buf, err_cap) != 0) {
         return NULL;
     }
+    g_engines[free_slot].last_used_tick = ++g_engine_tick;
     return &g_engines[free_slot];
 }
 
