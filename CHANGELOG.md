@@ -1,3 +1,11 @@
+## [Unreleased]
+
+- **64-Slot LRU Engine Cache, Late Axis Binding & Quiet Axis Probing (`src/libcorm.c`, `npm/native/corm_napi.c`, `npm/package.json`)**:
+  - Expanded `MAX_CACHED_ENGINES` from 16 to 64 slots with tick-based LRU eviction (`last_used_tick`) instead of round-robin eviction.
+  - Added late axis binding on cached `corm_engine` handles (dynamically opening newly requested axes and persisting the updated `@roster` sidecar) and per-activation `cormr_axis_env_config` / `rec_axis_env_config` invocation.
+  - Honored `CORM_QUIET` in `corm_axes_dlopen_record` to suppress stderr diagnostics when probing optional axis libraries.
+  - Updated `npm/package.json` `build:native` RPATH to include standalone `$ORIGIN` and sibling `stele/prebuilds/linux-x64` paths and sync `prebuilds/linux-x64/corm.node`.
+
 ## [2.4.1] - 2026-11-14
 
 - **N-API Engine Cache Safety, Per-Call Environment Restoration & Axis Merging (`src/libcorm.c`, `npm/native/corm_napi.c`, `npm/dist/index.js`, `npm/package.json`)**:
