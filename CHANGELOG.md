@@ -1,4 +1,4 @@
-## [Unreleased]
+## [2.4.2] - 2026-11-15
 
 - **64-Slot LRU Engine Cache, Late Axis Binding & Quiet Axis Probing (`src/libcorm.c`, `npm/native/corm_napi.c`, `npm/package.json`)**:
   - Expanded `MAX_CACHED_ENGINES` from 16 to 64 slots with tick-based LRU eviction (`last_used_tick`) instead of round-robin eviction.
