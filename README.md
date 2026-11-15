@@ -4,7 +4,7 @@
 
 # libcorm
 
-[![npm](https://img.shields.io/badge/npm-@tty-pt/corm-CB3837?logo=npm)](npm/README.md)
+[![npm](https://img.shields.io/badge/npm-@tty--pt/corm-CB3837?logo=npm)](npm/README.md)
 [![C99](https://img.shields.io/badge/C-C99-555?logo=c)](#)
 [![BSD-2-Clause](https://img.shields.io/badge/License-BSD--2--Clause-blue)](#)
 [![In-memory maps](https://img.shields.io/badge/in--memory-maps-16A34A)](#)

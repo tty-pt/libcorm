@@ -893,7 +893,7 @@ corm_open(const char *filename,
 
   head->record_id = record_id;
   head->vstr_hd = 0;
-  head->file = filename;
+  head->file = NULL;
 
   /* Allocate per-field inverse index handles for record-aware maps */
   if (record_id > 0) {
@@ -940,6 +940,13 @@ corm_open(const char *filename,
     corm_put(corm_files_hd, filename, &file);
   } else {
     ids_push((ids_t *) &file_p->ids, hd);
+  }
+
+  {
+    uint32_t fid = corm_id(corm_files_hd, filename);
+    if (fid != CM_MISS && corms[corm_files_hd].map[fid] != CM_MISS)
+      head->file = (const char *)corm_key(
+          corm_files_hd, corms[corm_files_hd].map[fid]);
   }
 
 file_skip:
@@ -2947,6 +2954,9 @@ corm_save_file(char *filename)
 
   file->fd = open(filename, O_RDWR | O_CREAT,
       S_IRUSR | S_IWUSR);
+
+  if (file->fd == -1 && (errno == ENOENT || errno == ENOTDIR))
+    return;
 
   CBUG(file->fd == -1, "open for save failed");
 

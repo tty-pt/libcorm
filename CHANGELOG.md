@@ -1,3 +1,41 @@
+## [2.4.1] - 2026-11-14
+
+- **N-API Engine Cache Safety, Per-Call Environment Restoration & Axis Merging (`src/libcorm.c`, `npm/native/corm_napi.c`, `npm/dist/index.js`, `npm/package.json`)**:
+  - Cached `corm_engine` handles across `CormExecCommand` calls with disk `mtime`/`size` verification (`engine_disk_matches`) and round-robin cache eviction.
+  - Saved and restored caller `env` overrides around `CormExecCommandInner` so per-call environment variables (`CORM_AXIS_PATH`, `CORM_SEPAL_EMBED_URL`, etc.) do not mutate the host process environment.
+  - Merged `CORM_DEFAULT_AXIS_PATH` with caller-supplied `CORM_AXIS_PATH` in `execCormCommand` and included `"prebuilds"` in `npm/package.json` `"files"`.
+
+## [2.4.0] - 2026-11-14
+
+- **In-Process Multi-Axis CormEngine & HTOK v4 Node-API Bindings (`npm/native/corm_napi.c`, `npm/dist/index.js`)**:
+  - Exposed `htokPack` (`corm_htok_pack`), `htokUnpack` (`corm_htok_unpack`), `execCormCommand`, `closeCormEngine`, and `CormEngine` (`PING`, `LIST`, `GET`, `GET_JSON`, `PUT`, `PUT_JSON`, `DEL`, `DEL_ALL`, `QUERY`) in the native Node-API addon with full `-X` expression evaluation and dynamic axis loading.
+  - Upgraded `CormDb` to support typed keys/values (`u`, `a`, `2u`, `2s`, `b`, `CM_MIRROR`), `delAll`, `listKeys`, and `count`, and removed all JS `Map` fallbacks.
+  - Requires `@tty-pt/stele` >=1.7.0 (`^1.7.0`).
+
+## [2.3.3] - 2026-11-13
+
+- **Packaging**:
+  - Requires `@tty-pt/stele` >=1.6.2 (`^1.6.2`).
+  - The npm tarball is now built once by CI, with a self-contained native addon per platform (`prebuilds/<os>-<cpu>/`) next to `corm.wasm`, and published as verified.
+
+## [2.3.2] - 2026-11-13
+
+- **Shared Allocator & Disjoint Global-Base (`corm.wasm`)**:
+  - Linked `corm.wasm` against `@tty-pt/stele`'s shared allocator (`malloc`/`calloc`/`realloc`/`free`) at a disjoint `--global-base=524288` to prevent static data segment collisions across co-loaded WASM modules.
+  - Upgraded `@tty-pt/stele` dependency to `>=1.6.1` (`^1.6.1`).
+
+## [2.3.1] - 2026-11-13
+
+- **macOS & CI Build System Compatibility**:
+  - Restored dual GNU Make / BSD Make assignment in mk build toolchain for compatibility with macOS GNU Make 3.81.
+  - Rebuilt and optimized `corm.wasm` artifact.
+
+## [2.3.0] - 2026-11-13
+
+- **Libstele v1.6.0 Substrate Alignment**:
+  - Upgraded substrate baseline to @tty-pt/stele@^1.6.0 (>=1.6.0).
+  - Aligned WebAssembly linear memory layout with generic canvas and bridge decoupled runtime.
+
 ## [2.2.4] - 2026-11-03
 
 - **Zero-Copy Shared Memory Chaining (`CandidateSet`) & Substrate Integration**:
