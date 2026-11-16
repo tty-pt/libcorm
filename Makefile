@@ -33,7 +33,6 @@ CFLAGS += -g
 
 WASM_SRCS := src/rec.c
 WASM_EXPORTS := cormr_set_new cormr_set_push cormr_set_seal cormr_set_count cormr_set_at cormr_set_intersect cormr_set_union cormr_set_subtract cormr_set_free cormr_rank_new cormr_rank_push cormr_rank_sorted cormr_rank_free
-WASM_LDFLAGS += -Wl,--import-memory
 
 include ../mk/include.mk
 

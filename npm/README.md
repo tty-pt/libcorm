@@ -4,14 +4,14 @@
 
 # @tty-pt/corm
 
-[![npm version](https://img.shields.io/badge/npm-v2.2.4-CB3837?logo=npm)](#)
+[![npm version](https://img.shields.io/badge/npm-v2.4.1-CB3837?logo=npm)](#)
 [![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD--2--Clause-blue)](#)
 [![TypeScript Ready](https://img.shields.io/badge/TypeScript-Ready-3178C6?logo=typescript)](#)
 [![Node.js Native](https://img.shields.io/badge/Node.js-N--API-339933?logo=node.js)](#)
 [![WebAssembly](https://img.shields.io/badge/WebAssembly-Reactor-654FF0?logo=webassembly)](#)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-success)](#)
 
-> Universal Node.js and Browser bindings for **`libcorm`** and the **Corm Recall Kernel (`cormr`)**. Features persistent memory-mapped storage, candidate set algebra, streaming min-heap ranking, and multi-axis composable queries.
+> Universal Node.js and Browser bindings for **`libcorm`** and the **Corm Recall Kernel (`cormr`)**. Features persistent memory-mapped storage, in-process multi-axis `CormEngine` & HTOK v4 binary containers, candidate set algebra, streaming min-heap ranking, and multi-axis composable queries.
 
 ---
 
@@ -22,15 +22,23 @@ npm install @tty-pt/corm
 ```
 
 ```typescript
-import { CormDb, CandidateSet, MinHeapRanker } from "@tty-pt/corm";
+import { CormDb, CormEngine, CandidateSet, MinHeapRanker, htokPack, htokUnpack } from "@tty-pt/corm";
 
-// 1. Persistent key-value storage (Node mmap or Browser in-memory/OPFS)
+// 1. Persistent key-value storage with typed keys/values (u, a, 2u, 2s, s, b)
 const db = new CormDb("./data.corm", "app_store");
 db.put("member:101", { name: "Alice", role: "admin" });
 const member = db.get("member:101");
 console.log(member); // { name: "Alice", role: "admin" }
 
-// 2. Ultra-fast Candidate Set Algebra (cormr_set_t)
+// 2. In-process multi-axis CormEngine & HTOK v4 binary envelopes
+const packed = htokPack(JSON.stringify({ summary: "Zero-copy recall", text: "In-memory map" }));
+console.log(htokUnpack(packed));
+
+const engine = new CormEngine("./docs.db@lemma,sepal:a:b");
+engine.putJson("1", JSON.stringify({ summary: "Zero-copy recall", text: "In-memory map" }));
+const hits = engine.query({ expr: "lemma", axes: { lemma: "recall" }, topK: 5 });
+
+// 3. Ultra-fast Candidate Set Algebra (cormr_set_t)
 const setA = new CandidateSet();
 setA.push(10).push(20).push(30).seal();
 
@@ -40,13 +48,14 @@ setB.push(20).push(30).push(40).seal();
 const intersection = setA.intersect(setB);
 console.log(intersection.toArray()); // [20, 30]
 
-// 3. Streaming Bounded Min-Heap Ranker (cormr_rank_t)
+// 4. Streaming Bounded Min-Heap Ranker (cormr_rank_t)
 const ranker = new MinHeapRanker(3 /* topK */, 0.2 /* minScore */);
 ranker.push(101, 0.85);
 ranker.push(102, 0.95);
 ranker.push(103, 0.40);
 console.log(ranker.sorted()); // [{ ref: 102, score: 0.95 }, { ref: 101, score: 0.85 }, ...]
 
+engine.close();
 db.close();
 ```
 
@@ -54,9 +63,9 @@ db.close();
 
 ## 2. Dual-Engine Runtime: Native Speed & Browser Portability
 
-`@tty-pt/corm` operates on an infallible 3-tier runtime engine:
-1. **Node.js Native (N-API)**: Executes native C99 compiled binaries with direct OS memory mapping (`mmap(2)`), zero copy, and multi-gigabyte storage throughput.
-2. **Browser & Edge WebAssembly**: When running in the browser, Cloudflare Workers, or environments without a C compiler, it seamlessly falls back to the pre-compiled `dist/corm.wasm` reactor with zero native dependencies.
+`@tty-pt/corm` operates on an infallible dual-engine runtime:
+1. **Node.js Native (N-API)**: Executes native C99 compiled binaries with direct OS memory mapping (`mmap(2)`), a 64-slot LRU engine cache (`execCormCommand`, `CormEngine`, `closeCormEngine`), HTOK v4 binary packing (`htokPack`, `htokUnpack`), and dynamic axis plugin loading (`@lemma`, `@sepal`, `@joint`, `@islet`).
+2. **Browser & Edge WebAssembly**: When running in the browser, Cloudflare Workers, or environments without a C compiler, it seamlessly falls back to the pre-compiled `dist/corm.wasm` shared-memory reactor on `@tty-pt/stele`.
 
 ---
 
