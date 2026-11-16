@@ -1070,7 +1070,7 @@ int corm_htok_unpack(const uint8_t *bytes, size_t len, char **out_json, size_t *
 
 		uint64_t dlen = 0;
 		size_t dnr = htok_leb128_read(bytes + offset, len - offset, &dlen);
-		if (!dnr || offset + dnr + dlen > len + 1) break;
+		if (!dnr || dnr > len - offset || dlen > (uint64_t)(len - offset - dnr)) break;
 		offset += dnr;
 
 		if (parsed_fields < 64) {

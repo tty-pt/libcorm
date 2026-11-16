@@ -11,15 +11,19 @@
 [![WebAssembly](https://img.shields.io/badge/WebAssembly-Reactor-654FF0?logo=webassembly)](#)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-success)](#)
 
-> Universal Node.js and Browser bindings for **`libcorm`** and the **Corm Recall Kernel (`cormr`)**. Features persistent memory-mapped storage, in-process multi-axis `CormEngine` & HTOK v4 binary containers, candidate set algebra, streaming min-heap ranking, and multi-axis composable queries.
+> Universal Node.js and Browser bindings for **`libcorm`** and the **Corm Recall Kernel (`cormr`)**. Features persistent memory-mapped storage, in-process multi-axis `CormEngine` & HTOK v4 binary containers, candidate set algebra, streaming min-heap ranking, and multi-axis composable queries. Canonical C headers: `<ttypt/corm.h>` and `<ttypt/corm-recall.h>`.
+
+📖 **Full C & Storage Documentation**: See the main [**libcorm GitHub README**](https://github.com/tty-pt/libcorm#readme) for `mmap(2)` B-tree/hash internals, typed key/value descriptors, and C multi-axis recall architecture.
 
 ---
 
-## 1. Quickstart
+## 1. Quickstart & Installation
 
 ```bash
 npm install @tty-pt/corm
 ```
+
+**Native OS Packages (`tty.pt`)**: Prebuilt native C packages (`libcorm`) for Linux (`apt`, `apk`, `pacman`, `dnf`), macOS (`brew`), Windows (`winget`, MSYS2), and OpenBSD (`pkg_add`) are available via the [**tty.pt package repositories**](https://github.com/tty-pt/ci/blob/main/docs/install.md).
 
 ```typescript
 import { CormDb, CormEngine, CandidateSet, MinHeapRanker, htokPack, htokUnpack } from "@tty-pt/corm";
@@ -114,4 +118,4 @@ make npm-test     # Runs verification test suite
 
 ## License
 
-BSD 2-Clause License. Copyright (c) 2026, tty-pt.
+BSD-2-Clause — Copyright (c) 2026, Paulo Quirino <quirinpa@gmail.com>. See [LICENSE](https://github.com/tty-pt/libcorm/blob/main/LICENSE).

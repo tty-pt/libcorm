@@ -189,6 +189,7 @@ typedef struct {
   int fd;
   char *mmaped;
   size_t size;
+  int dirty;
 } corm_file_t;
 
 static corm_head_t corm_heads[CM_MAX];
@@ -1273,6 +1274,20 @@ static void handle_inverse_put(corm_head_t *head, int fi,
 
 /* }}} */
 
+  static inline void
+corm_mark_dirty(uint32_t hd)
+{
+  uint32_t phd = hd;
+  while (corm_heads[phd].phd != phd)
+    phd = corm_heads[phd].phd;
+  if (!corm_heads[phd].file)
+    return;
+  corm_file_t *file = (corm_file_t *) corm_get(
+      corm_files_hd, corm_heads[phd].file);
+  if (file)
+    file->dirty = 1;
+}
+
   static inline uint32_t
 _corm_put(uint32_t hd, const void * key,
     const void *value, uint32_t pn)
@@ -1429,7 +1444,7 @@ _corm_put(uint32_t hd, const void * key,
    * cannot be located by key probe (the former key is gone), so this stays
    * a scan; it only fires on the shared-position mirror path. */
   if (head->phd != hd && pn != CM_MISS) {
-    for (uint32_t i = 0; i < head->m; i++) {
+      for (uint32_t i = 0; i < head->m; i++) {
       if (corm->map[i] == n) {
         corm->map[i] = CM_MISS;
         if (i != lookup_id)
@@ -1442,6 +1457,7 @@ _corm_put(uint32_t hd, const void * key,
   }
 
   head->iflags |= CM_SDIRTY;
+  corm_mark_dirty(hd);
 
   return lookup_id;
 }
@@ -1833,6 +1849,7 @@ static void corm_ndel_topdown(uint32_t hd, uint32_t n) {
   corm->val_sizes[n] = 0;
 
   head->iflags |= CM_SDIRTY;
+  corm_mark_dirty(hd);
 
   /* Update hash table entry */
   if (id != CM_MISS) {
@@ -1885,6 +1902,7 @@ corm_clear_fast(uint32_t hd)
   corm->idm.last = 0;
   head->n = 0;
   head->iflags |= CM_SDIRTY;
+  corm_mark_dirty(hd);
 }
 
   void /* API */
@@ -2015,6 +2033,7 @@ corm_del_all(uint32_t hd, const void * const key)
       }
 
       head->iflags |= CM_SDIRTY;
+      corm_mark_dirty(hd);
 
       if (head->n == 0)
         memset(corm->map, 0xFF, sizeof(uint32_t) * head->m);
@@ -2357,6 +2376,16 @@ corm_close(uint32_t hd)
   if (!corm->omap)
     return;
 
+  // remove any file associations before dropping in-memory state so
+  // closing a handle neither marks its file dirty nor saves after close.
+  if (head->file) {
+    const corm_file_t *file = corm_get(corm_files_hd, head->file);
+    if (file)
+      ids_remove((ids_t *) &file->ids, hd);
+    head->file = NULL;
+  }
+  mdbs[hd] = 0;
+
   corm_drop(hd);
 
   cur = ids_iter(&corm->linked);
@@ -2398,17 +2427,6 @@ corm_close(uint32_t hd)
     free(corm->table);
   corm->omap = NULL;
   idm_del(&idm, hd);
-  mdbs[hd] = 0;
-
-  // remove any file associations so we don't try
-  // saving it to a file after it is closed.
-  if (!head->file)
-    return;
-  const corm_file_t *file = corm_get(corm_files_hd, head->file);
-  if (!file)
-    return;
-  ids_remove((ids_t *) &file->ids, hd);
-
 }
 
   void /* API */
@@ -2823,6 +2841,7 @@ corm_load_file(char *filename, uint32_t dbid, uint32_t hd)
   if (!file)
     return;
 
+  int was_dirty = file->dirty;
   struct stat sb;
   char *mm;
 
@@ -2830,8 +2849,11 @@ corm_load_file(char *filename, uint32_t dbid, uint32_t hd)
     goto skip_open;
 
   file->fd = open(filename, O_RDONLY);
-  if (file->fd < 0)
+  if (file->fd < 0) {
+    if (errno == ENOENT)
+      file->dirty = 1;
     return;
+  }
 
   CBUG(fstat(file->fd, &sb) == -1, "fstat");
 
@@ -2868,6 +2890,9 @@ skip_open:
 
     mm += block;
   }
+
+  file_close(file);
+  file->dirty = was_dirty;
 }
 
   static size_t
@@ -2944,16 +2969,38 @@ corm_save_file(char *filename)
   corm_file_t *file = (corm_file_t *) corm_get(corm_files_hd, filename);
   CBUG(!file, "called with unknown filename");
 
+  if (!file->dirty)
+    return;
+
   if (file->mmaped)
     file_close(file);
 
   file->size = corm_calc_file_size(&file->ids);
 
-  if (file->size == 0)
+  if (file->size == 0) {
+    file->dirty = 0;
     return;
+  }
 
-  file->fd = open(filename, O_RDWR | O_CREAT,
-      S_IRUSR | S_IWUSR);
+  static uint32_t save_seq = 0;
+  size_t fn_len = strlen(filename);
+  char *tmpname = malloc(fn_len + 64);
+  if (tmpname) {
+    snprintf(tmpname, fn_len + 64, "%s.tmp.%d.%u",
+        filename, (int)getpid(), ++save_seq);
+    file->fd = open(tmpname, O_RDWR | O_CREAT | O_TRUNC,
+        S_IRUSR | S_IWUSR);
+  } else {
+    file->fd = -1;
+  }
+
+  int use_tmp = (file->fd != -1);
+  if (!use_tmp) {
+    free(tmpname);
+    tmpname = NULL;
+    file->fd = open(filename, O_RDWR | O_CREAT,
+        S_IRUSR | S_IWUSR);
+  }
 
   if (file->fd == -1 && (errno == ENOENT || errno == ENOTDIR))
     return;
@@ -2981,6 +3028,12 @@ corm_save_file(char *filename)
   }
 
   file_close(file);
+  if (use_tmp && tmpname) {
+    if (rename(tmpname, filename) == -1)
+      unlink(tmpname);
+    free(tmpname);
+  }
+  file->dirty = 0;
 }
 
   void /* API */

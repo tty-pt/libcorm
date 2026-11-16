@@ -1395,7 +1395,6 @@ static int engine_open_filespec(CormEngineInstance *eng, const char *filespec, c
 
 static void engine_close(CormEngineInstance *eng) {
     if (!eng || !eng->is_open) return;
-    corm_save();
     for (int i = 0; i < eng->roster_n; i++) {
         const char *name = eng->roster_names[i];
         int slot = corm_axes_find_slot(name);
