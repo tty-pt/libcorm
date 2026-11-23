@@ -1017,6 +1017,16 @@ const char *corm_field_get(uint32_t hd, const char *item_id,
 #define CORM_HTOK_FLAG_HAS_EVIDENCE      0x04
 #define CORM_HTOK_FLAG_IS_ANCHOR         0x08
 
+typedef char *(*corm_htok_tok_decoder_fn)(const uint8_t *bytes, size_t len);
+
+/**
+ * @brief Register an optional token decoder callback for HTOK token-packed fields.
+ *
+ * When set, corm_htok_unpack passes TYPE_TOKENS fields to this decoder to recover
+ * the original UTF-8 text instead of passing the raw packed bytes.
+ */
+void corm_htok_set_tok_decoder(corm_htok_tok_decoder_fn fn);
+
 /**
  * @brief Pack a JSON string representation of a memory envelope into HTOK v4 binary bytes.
  *

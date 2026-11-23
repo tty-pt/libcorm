@@ -959,6 +959,12 @@ int corm_htok_pack(const char *json_str, size_t json_len, uint8_t **out_bytes, s
 	return 0;
 }
 
+static corm_htok_tok_decoder_fn g_htok_tok_decoder = NULL;
+
+void corm_htok_set_tok_decoder(corm_htok_tok_decoder_fn fn) {
+	g_htok_tok_decoder = fn;
+}
+
 /* --- corm_htok_unpack Implementation --- */
 
 int corm_htok_unpack(const uint8_t *bytes, size_t len, char **out_json, size_t *out_json_len) {
@@ -1077,10 +1083,25 @@ int corm_htok_unpack(const uint8_t *bytes, size_t len, char **out_json, size_t *
 			fields[parsed_fields].name = strdup(name_buf);
 			fields[parsed_fields].type_tag = type_tag;
 			fields[parsed_fields].len = (size_t)dlen;
-			fields[parsed_fields].data = malloc((size_t)dlen + 1);
-			if (fields[parsed_fields].data) {
-				memcpy(fields[parsed_fields].data, bytes + offset, (size_t)dlen);
-				fields[parsed_fields].data[dlen] = '\0';
+			if (type_tag == CORM_HTOK_TYPE_TOKENS && g_htok_tok_decoder) {
+				char *decoded = g_htok_tok_decoder(bytes + offset, (size_t)dlen);
+				if (decoded) {
+					fields[parsed_fields].data = (uint8_t *)decoded;
+					fields[parsed_fields].len = strlen(decoded);
+					fields[parsed_fields].type_tag = CORM_HTOK_TYPE_UTF8;
+				} else {
+					fields[parsed_fields].data = malloc((size_t)dlen + 1);
+					if (fields[parsed_fields].data) {
+						memcpy(fields[parsed_fields].data, bytes + offset, (size_t)dlen);
+						fields[parsed_fields].data[dlen] = '\0';
+					}
+				}
+			} else {
+				fields[parsed_fields].data = malloc((size_t)dlen + 1);
+				if (fields[parsed_fields].data) {
+					memcpy(fields[parsed_fields].data, bytes + offset, (size_t)dlen);
+					fields[parsed_fields].data[dlen] = '\0';
+				}
 			}
 			parsed_fields++;
 		}
