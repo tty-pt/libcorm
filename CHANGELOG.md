@@ -1,3 +1,15 @@
+## [Unreleased]
+
+- **HTOK Token Decoder Hook & Unpack Bounds Hardening (`include/ttypt/corm.h`, `npm/include/ttypt/corm.h`, `src/htok.c`)**:
+  - Added `corm_htok_tok_decoder_fn` and `corm_htok_set_tok_decoder()` so `corm_htok_unpack()` can decode `CORM_HTOK_TYPE_TOKENS` fields back into UTF-8 text (`f601900`).
+  - Hardened LEB128 length bounds checking against integer overflow in `corm_htok_unpack()` (`f601900`, `5d5be7a`).
+- **Dirty-File Tracking, Atomic Persistence & Close Safety (`src/libcorm.c`, `npm/dist/corm.wasm`)**:
+  - Added `corm_file_t.dirty` and `corm_mark_dirty()` across `_corm_put()`, `corm_ndel_topdown()`, `corm_clear_fast()`, and `corm_del_all()`, skipping no-op disk rewrites in `corm_save_file()` when `!file->dirty` (`5d5be7a`).
+  - Switched `corm_save_file()` to write to a per-PID temporary file (`%s.tmp.%d.%u`) and atomically `rename()` into place (`5d5be7a`).
+  - Closed the backing file descriptor at the end of `corm_load_file()` (marking new `ENOENT` files dirty), detached `head->file` before `corm_drop()` in `corm_close()` so closing a handle does not mark its file dirty, and rebuilt `npm/dist/corm.wasm` (`5d5be7a`).
+- **Standardized Package Metadata (`npm/package.json`, `npm/README.md`)**:
+  - Standardized author (`Paulo Quirino <quirinpa@gmail.com>`), `BSD-2-Clause` license, and npm `README.md` (`5d5be7a`).
+
 ## [2.4.2] - 2026-11-15
 
 - **64-Slot LRU Engine Cache, Late Axis Binding & Quiet Axis Probing (`src/libcorm.c`, `npm/native/corm_napi.c`, `npm/package.json`)**:

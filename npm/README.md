@@ -11,7 +11,7 @@
 [![WebAssembly](https://img.shields.io/badge/WebAssembly-Reactor-654FF0?logo=webassembly)](#)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-success)](#)
 
-> Universal Node.js and Browser bindings for **`libcorm`** and the **Corm Recall Kernel (`cormr`)**. Features persistent memory-mapped storage, in-process multi-axis `CormEngine` & HTOK v4 binary containers, candidate set algebra, streaming min-heap ranking, and multi-axis composable queries. Canonical C headers: `<ttypt/corm.h>` and `<ttypt/corm-recall.h>`.
+> Universal Node.js and Browser bindings for **`libcorm`** and the **Corm Recall Kernel (`cormr`)**. Features persistent memory-mapped storage, in-process multi-axis `CormEngine` & HTOK v4 binary containers, candidate set algebra, streaming min-heap ranking, and multi-axis composable queries. Canonical C headers: `<ttypt/corm.h>` and `<ttypt/cormr.h>`.
 
 📖 **Full C & Storage Documentation**: See the main [**libcorm GitHub README**](https://github.com/tty-pt/libcorm#readme) for `mmap(2)` B-tree/hash internals, typed key/value descriptors, and C multi-axis recall architecture.
 

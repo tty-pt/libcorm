@@ -143,6 +143,7 @@ void search_players(void) {
 | `corm_assoc` | `void corm_assoc(sec_hd, prim_hd, cb, ud)` | Automatically maintain an inverted secondary index |
 | `corm_iter` | `uint32_t corm_iter(hd, key_ptr, flags)` | Iterate all entries or scan a sorted range |
 | `corm_rec_reg` | `uint32_t corm_rec_reg(name, fields, n)` | Register a structured record schema |
+| `corm_htok_pack` / `corm_htok_unpack` | `int corm_htok_unpack(bytes, len, &json, &n)` | Pack/unpack HTOK v4 binary envelopes (with optional `corm_htok_set_tok_decoder()` hook for `CORM_HTOK_TYPE_TOKENS` fields) |
 | `cormr_query_run` | `cormr_rank_t *cormr_query_run(query)` | Execute multi-axis boolean join and rank loop |
 
 👉 *For custom type registration, multi-value keys, ID managers, and the complete 40+ function reference, see [docs/API.md](docs/API.md).*
