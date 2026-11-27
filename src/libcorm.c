@@ -810,12 +810,15 @@ corm_grow(uint32_t hd)
   corm_rebuild_map(hd);
 }
 
+static void corm_ensure_init(void);
+
   uint32_t /* API */
 corm_open(const char *filename,
     const char *database,
     uint32_t ktype, uint32_t vtype,
     uint32_t mask, uint32_t flags)
 {
+  corm_ensure_init();
   uint32_t record_id = 0;
 
   /* ── Handle CM_RECORD flag ────────────────────────────────────────── */
@@ -1032,10 +1035,16 @@ __attribute__((destructor))
     idm_drop(&idm);
   }
 
+static int corm_initialized = 0;
+
 __attribute__((constructor))
   static void
 corm_init(void)
 {
+  if (corm_initialized)
+    return;
+  corm_initialized = 1;
+
   corm_type_t *type;
 
   memset(corms, 0, sizeof(corms));
@@ -2490,9 +2499,17 @@ corm_assoc_multi(uint32_t hd, uint32_t link, corm_assoc_multi_t cb, void *userda
   }
 }
 
+static void
+corm_ensure_init(void)
+{
+  if (!corm_initialized)
+    corm_init();
+}
+
   uint32_t /* API */
 corm_reg(size_t len)
 {
+  corm_ensure_init();
   if (types_n > TYPES_MASK) {
     fprintf(stderr, "corm_reg: type limit reached\n");
     return CM_MISS;
@@ -2517,6 +2534,7 @@ corm_cmp_set(uint32_t ref, corm_cmp_t *cmp)
   uint32_t /* API */
 corm_mreg(corm_measure_t *measure)
 {
+  corm_ensure_init();
   if (types_n > TYPES_MASK) {
     fprintf(stderr, "corm_mreg: type limit reached\n");
     return CM_MISS;
